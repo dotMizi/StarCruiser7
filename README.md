@@ -42,7 +42,7 @@ Touch screen - Tapping on the cockpit view activates or deactivates the attack c
 
 The shoulder buttons are currently not used.
 
-Trivia
+Trivia:
 Star Cruiser 7 is the name of the spaceship that the player operates in Star Raiders.
 
 The content of this manual used brand names and trademarks are the property of their respective owners and are used only descriptive.
