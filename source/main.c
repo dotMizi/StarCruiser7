@@ -1227,6 +1227,7 @@ int main()
 				if(menu_item_selected==0)
 				{
 					gamestate = GAME_RUNNING;
+					bottomscreen_state = COCKPIT; // reenable bottom screen
 				} else {
 					gamestate = GAME_SELECT;
 					init_game();
