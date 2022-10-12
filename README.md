@@ -12,7 +12,7 @@ So let's play!
 - Fixing hundreds of bugs that, in my experience, lurk in such code
 
 ## Description of the game
-The original idea is certainly inspired by the films of the time, Battlestar Galactica and Star Wars. The player defends his own starbases against the enemy Zylons. The best way to get a general overview is to read the original Star Raiders manual. It can be found as a scan on many internet sites. Any internet search engine will help you.  It is a manual that, as was very common at the time, gives detailed information also about technical realisation. It also helped me a lot to program Star Cruiser 7. 
+The original idea is certainly inspired by the movies of the time, Battlestar Galactica and Star Wars. The player defends his own starbases against the enemy Zylons. The best way to get a general overview is to read the original Star Raiders manual. It can be found as a scan on many internet sites. Any internet search engine will help you.  It is a manual that, as was very common at the time, gives detailed information also about technical realisation. It also helped me a lot to program Star Cruiser 7. 
 
 ## Build
 For the build you need the devkitPro tool chain.
