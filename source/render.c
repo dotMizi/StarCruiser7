@@ -251,16 +251,18 @@ void draw_bottom_screen()
 				C_WHITE, 
 				WIDTH_TOP);
 
-			for (x=1; x < 16; x++)	// set vertical grid lines
+			for (x=1; x < GMAP_MAX_X; x++)	// set vertical grid lines
 				draw_block(fbAdr, 7+x*19, 25+18, 2, 19*8+2, C_WHITE, WIDTH_BOTTOM);
-			for (y=1; y < 8; y++)	// set horizontal grid lines
+			for (y=1; y < GMAP_MAX_Y; y++)	// set horizontal grid lines
 				draw_block(fbAdr, 7, 25+18+y*19, 17*18, 2, C_WHITE, WIDTH_BOTTOM);
 
 			// mark cruiser sector
+			if ((hyperwarp_target_sector_x >= 0) && (hyperwarp_target_sector_y >= 0) && (hyperwarp_target_sector_x < GMAP_MAX_X) && (hyperwarp_target_sector_y < GMAP_MAX_Y))
+			{
+				if (blink_on)
+					draw_block(fbAdr, 9+hyperwarp_target_sector_x*19, 25+20+hyperwarp_target_sector_y*19, 17, 17, C_STARBASE_ORANGE_SHIELD, WIDTH_BOTTOM);
+			}
 			draw_block(fbAdr, 9+cruiser_sector_x*19, 25+20+cruiser_sector_y*19, 17, 17, C_STARBASE_ORANGE_SHIELD, WIDTH_BOTTOM);
-			if (blink_on)
-				draw_block(fbAdr, 9+hyperwarp_target_sector_x*19, 25+20+hyperwarp_target_sector_y*19, 17, 17, C_STARBASE_ORANGE_SHIELD, WIDTH_BOTTOM);
-			
 			hyperwarp_energy = hyperwarp_costs[
 				(int)((
 					sqrt(

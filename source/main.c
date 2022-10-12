@@ -46,8 +46,7 @@ int maxspeed = 9;
 enum game_states gamestate;
 enum bottom_screen_states bottomscreen_state;
 bool touch_down=false;
-#define GMAP_MAX_X 16
-#define GMAP_MAX_Y 8
+
 struct gmapentry gmap[GMAP_MAX_X][GMAP_MAX_Y];
 int cruiser_sector_x;
 int cruiser_sector_y;
@@ -1307,13 +1306,22 @@ int main()
 			menu_item_selected = 0;
 			game_tasks();
 			if (hidKeysDown() & KEY_Y){ // HYPERWARP
+				
 				switch(warp_state) {
 					case ENGAGED:
 					case IN_HYPERSPACE:
 						queue_message(10); // HYPERWARP ABORTED
 						warp_state = ABORTED;
 						break;
-					case NOT_ENGAGED:
+					case NOT_ENGAGED:						
+						while ((hyperwarp_target_sector_x < 0) || (hyperwarp_target_sector_y < 0) || (hyperwarp_target_sector_x >= GMAP_MAX_X) || (hyperwarp_target_sector_y >= GMAP_MAX_Y))
+						{
+							int t;
+							t = rand()%3 - 1; 
+							hyperwarp_target_sector_x = cruiser_sector_x + t;
+							t = rand()%3 - 1; 
+							hyperwarp_target_sector_y = cruiser_sector_y + t;
+						}
 						warp_state = ENGAGED;
 						warp_speed = velocity[speed]+speed;
 						front_view = true;
@@ -1464,6 +1472,8 @@ int main()
 			{
 				warp_speed -= 1;
 				if (warp_speed < velocity[speed]) warp_state = NOT_ENGAGED;
+				hyperwarp_target_sector_x = -1;
+				hyperwarp_target_sector_y = -1;
 			}
 				
 			draw_bottom_screen();
@@ -1999,7 +2009,8 @@ void init_sector()
 		default:
 			break;
 	}
-	
+	hyperwarp_target_sector_x = -1;
+	hyperwarp_target_sector_y = -1;
 	maneuver(); //set up enemy directions
 	create_new_asteroid(); //set up first asteroid
 }
