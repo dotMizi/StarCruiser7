@@ -54,12 +54,12 @@ int hyperwarp_target_sector_x;
 int hyperwarp_target_sector_y;
 
 struct timeval t_game, t_start, t_last, t_act;
-int last_secs = 0;
-int last_secs2 = 0;
-int last_secs9 = 0;
-int last_secs_min = 0;
-int rand_secs = 0;
-int secs = 0;
+time_t last_secs = 0;
+time_t last_secs2 = 0;
+time_t last_secs9 = 0;
+time_t last_secs_min = 0;
+time_t rand_secs = 0;
+time_t secs = 0;
 
 int ASlot;
 int counter;
@@ -917,17 +917,17 @@ void create_new_star(int i)
 }
 
 //handle game over delay
-int last_secs_gd = 0;
+time_t last_secs_gd = 0;
 void set_game_over_display_delay()
 {
 	gettimeofday(&t_act, NULL);
-	last_secs_gd = t_act.tv_sec - t_game.tv_sec;
+	last_secs_gd = t_act.tv_sec;
 }
 
 bool game_over_display_on()
 {
 	gettimeofday(&t_act, NULL);
-	if ((last_secs_gd + 5) <= secs) return true;
+	if ((last_secs_gd + 5) <= t_act.tv_sec) return true;
 	return false;
 }
 
