@@ -12,6 +12,7 @@
 #include "3drenderer.h"
 #include "chars.h"
 #include "colors.h"
+#include "sound.h"
 
 /*
 * Render the screens
@@ -361,6 +362,8 @@ void draw_top_screen()
 	u8* fbAdr_L = gfxGetFramebuffer(GFX_TOP,GFX_LEFT,NULL,NULL);
     u8* fbAdr_R = gfxGetFramebuffer(GFX_TOP,GFX_RIGHT,NULL,NULL);
 	
+	checkSoundFX();
+
 	// clear screen
 	for (x=0; x<WIDTH_TOP; x++)
 		for(y=0; y<HEIGHT; y++)
@@ -373,14 +376,6 @@ void draw_top_screen()
 					fbAdr_R[((x*HEIGHT)+y)*3+2] = color_r[shield_active?C_SPACE_SHIELD:C_SPACE];
 		}
 		
-	// draw the message
-	if (strlen(act_message) > 0) 
-	{
-		int strpixellength = strlen(act_message)*16;
-		draw_text_XXL (act_message, fbAdr_L, WIDTH_TOP/2-strpixellength/2, HEIGHT -30, C_WHITE, WIDTH_TOP);
-		draw_text_XXL (act_message, fbAdr_R, WIDTH_TOP/2-strpixellength/2, HEIGHT -30, C_WHITE, WIDTH_TOP);
-	}
-	
 	// drawing mode normal flight
     if (warp_state != IN_HYPERSPACE) 
 	{
@@ -413,7 +408,7 @@ void draw_top_screen()
 
 					if(VectorLength(render_object[i].mesh.Position) > 20)
 					{
-						if (warp_state != ENGAGED) Render(render_object[i].mesh, front_view, render_object[i].objecttype);
+						if (warp_speed <= 65) Render(render_object[i].mesh, front_view, render_object[i].objecttype);
 					}
 				}
 		}		
@@ -446,18 +441,34 @@ void draw_top_screen()
 	{
 		int posY = HEIGHT -90;
 		char message[81];
+		setSoundFXPrefs(ENGINES, 0.0, 0);
 		if (aborted == MISSION_COMPLETED)
 		{ // CONGRATULATIONS
+			if (gd_sound) 
+			{
+				setSoundFX(CONGRATULATIONS);
+				gd_sound = false;
+			}
 			draw_text_XXL (message_text[29], fbAdr_L, (WIDTH_TOP-strlen(message_text[29])*16)/2, posY, C_WHITE, WIDTH_TOP); 
 			draw_text_XXL (message_text[29], fbAdr_R, (WIDTH_TOP-strlen(message_text[29])*16)/2, posY, C_WHITE, WIDTH_TOP);
 			posY-=30;
 		}
 		if ((aborted == ZYLON_FIRE) || (aborted == HIT_BY_ASTEROID))
 		{ // POSTHUMOUS RANK IS
+			if (gd_sound) 
+			{
+				setSoundFX(GAME_OVER);
+				gd_sound = false;
+			}
 			draw_text_XXL (message_text[22], fbAdr_L, (WIDTH_TOP-strlen(message_text[22])*16)/2, posY, C_WHITE, WIDTH_TOP);
 			draw_text_XXL (message_text[22], fbAdr_R, (WIDTH_TOP-strlen(message_text[22])*16)/2, posY, C_WHITE, WIDTH_TOP);
 			posY-=30;
 		} else { // NEW RANK IS
+			if (gd_sound) 
+			{
+				setSoundFX(GAME_OVER);
+				gd_sound = false;
+			}
 			draw_text_XXL (message_text[25], fbAdr_L, (WIDTH_TOP-strlen(message_text[25])*16)/2, posY, C_WHITE, WIDTH_TOP);
 			draw_text_XXL (message_text[25], fbAdr_R, (WIDTH_TOP-strlen(message_text[25])*16)/2, posY, C_WHITE, WIDTH_TOP);
 			posY-=30;
@@ -468,6 +479,14 @@ void draw_top_screen()
 		sprintf (message, "CLASS %d", class);
 		draw_text_XXL (message, fbAdr_L, (WIDTH_TOP-strlen(message)*16)/2, posY, C_WHITE, WIDTH_TOP);
 		draw_text_XXL (message, fbAdr_R, (WIDTH_TOP-strlen(message)*16)/2, posY, C_WHITE, WIDTH_TOP);
+	}
+	
+	// draw the message
+	if (strlen(act_message) > 0) 
+	{
+		int strpixellength = strlen(act_message)*16;
+		draw_text_XXL (act_message, fbAdr_L, WIDTH_TOP/2-strpixellength/2, HEIGHT -30, C_WHITE, WIDTH_TOP);
+		draw_text_XXL (act_message, fbAdr_R, WIDTH_TOP/2-strpixellength/2, HEIGHT -30, C_WHITE, WIDTH_TOP);
 	}
 	
 	// draw attack computer
@@ -925,6 +944,8 @@ void draw_trails(u8* fbAdr_L, u8* fbAdr_R)
 		Vector3 step = VectorNormal(trail);
 		int dist = abs((int)VectorLength(trail));
 		
+		checkSoundFX();
+		
 		for (j=0; j<dist; j++)
 		{
 			int posX, posY;
@@ -1003,6 +1024,9 @@ void draw_stars(u8* fbAdr_L, u8* fbAdr_R)
 	for (i=0; i<NUM_STARS; i++)
 	{
 		int posX, posY;
+		
+		checkSoundFX();
+		
 		if ((int)stars[i].z*dir  > focal_distance)
 		{
 			posX = (int)(focal_distance * dir * stars[i].x / stars[i].z)+WIDTH_TOP/2;	

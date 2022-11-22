@@ -86,6 +86,7 @@ extern bool computer;
 extern bool computer_avail();
 extern bool sector_scan_avail();
 extern bool engines_avail();
+extern bool gd_sound;
 
 extern int overall_damage_count;
 extern float energy;

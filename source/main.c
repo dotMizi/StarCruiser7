@@ -13,6 +13,7 @@
 #include "colors.h"
 #include "render.h"
 #include "3drenderer.h"
+#include "sound.h"
 
 /*
 * MAIN contains all the game logic and object moving
@@ -71,9 +72,12 @@ float hyperwarp_energy;
 enum warp_states warp_state;
 enum docking_states docking_state;
 float warp_speed;
+int warp_sound = 0;
 star hyperwarp_location;
 star hyperwarp_direction;
 int hyperspace_ttr;
+
+bool red_alert = false;
 
 floater asteroid;
 
@@ -463,6 +467,7 @@ void damage(int damagelevel)
 			}
 			
 			queue_message(30); //DAMAGE CONTROL
+			setSoundFX(DAMAGE_REPORT);
 			switch(component)
 			{
 				case 0:
@@ -540,7 +545,7 @@ void move_objects()
 	{
 		if (render_object[i].active)
 		{
-			render_object[i].mesh.Position.Z -= velocity[speed]; //move by cruiser speed
+			render_object[i].mesh.Position.Z -= (warp_state == NOT_ENGAGED)?velocity[speed]:(int)warp_speed; //move by cruiser speed
 			
 			if (render_object[i].objecttype == ENEMYPHOTONT)
 			{
@@ -557,6 +562,7 @@ void move_objects()
 									damage(0);
 									render_object[i].active = false;
 									drain_energy(PHOTONT_HIT);
+									setSoundFX(HIT);
 									continue;
 						}
 			}
@@ -706,6 +712,7 @@ void move_shuttle()
 				{
 					docking_state = COMPLETE;
 					queue_message(16);
+					setSoundFX(DOUBLETIC);
 					repair();
 				}
 			
@@ -764,6 +771,7 @@ void hit(int x, int y, int z)
 			}
 		}
 	}
+	setSoundFX (EXPLOSION);
 }
 
 void move_hyperwarp_mark()
@@ -843,7 +851,7 @@ void create_new_enemy_photont(Vector3 source)
 		render_object[i].move.x = dest.X; 
 		render_object[i].move.y = dest.Y-0.5; 
 		render_object[i].move.z = dest.Z; 
-		
+		setSoundFX (PHOTONT_FIRE_E);
 	} 
 }
 
@@ -873,6 +881,7 @@ void create_new_friendly_photont()
 			render_object[i].move.z = (velocity[speed] + 10); 
 			if (front_view) render_object[i].move.z = (velocity[speed] + 10)*(-1);
 			drain_energy(PHOTONT_FIRE);
+			setSoundFX (photon_left_ready?PHOTONT_FIRE_L:PHOTONT_FIRE_R);
 		}
 		photon_left_ready = !photon_left_ready;
 	} 
@@ -918,10 +927,12 @@ void create_new_star(int i)
 
 //handle game over delay
 time_t last_secs_gd = 0;
+bool gd_sound = false;
 void set_game_over_display_delay()
 {
 	gettimeofday(&t_act, NULL);
 	last_secs_gd = t_act.tv_sec;
+	gd_sound = true;
 }
 
 bool game_over_display_on()
@@ -1050,16 +1061,19 @@ void rotate(circlePosition joy)
 
 void game_tasks()
 {
+	checkSoundFX();
 	heartbeat();
 	move_stars();
 	if ((aborted == RUNNING)&&(gamestate == GAME_RUNNING))
 	{
 		if (energy <= 0)
 		{
-			gamestate = GAME_END;
-			aborted = NO_ENERGY;
-			set_game_over_display_delay();
-			
+			if (warp_state == NOT_ENGAGED)
+			{
+				gamestate = GAME_END;
+				aborted = NO_ENERGY;
+				set_game_over_display_delay();
+			} else warp_state = ABORTED;
 		}
 		if (get_num_of_starbases() < 1)
 		{
@@ -1083,6 +1097,7 @@ void game_tasks()
 			{
 				queue_message(13);
 				queue_message(14);
+				setSoundFX(DOCKING);
 				docking_state = ESTABLISHED;
 				int s = get_enemie_slot();
 				if (s >= 0)
@@ -1123,6 +1138,32 @@ void game_tasks()
 
 	move_objects();
 	
+	{ // set engine volume
+		float engine_vol = 0.0;
+		if (warp_state == NOT_ENGAGED)
+		{
+			warp_sound = 0;
+			engine_vol = (1.0/95.0)*velocity[speed];
+		} else if (warp_speed < 65)
+		{
+			engine_vol = 1.0/95.0*warp_speed;
+		} else 
+		{
+			if ((warp_state == ENGAGED) && (warp_sound == 0))
+			{
+				setSoundFX(HWIN);
+				warp_sound = 1;
+			}
+			if ((warp_state == ABORTED) && (warp_sound == 1))
+			{
+				setSoundFX(HWOUT);
+				warp_sound = 2;
+			}
+		}
+		//if (gamestate != RUNNING) engine_vol = 0.0;
+		setSoundFXPrefs(ENGINES, engine_vol,0);
+	}
+	
 	gspWaitForVBlank(); // wait for frame
 	  	
 	draw_top_screen();
@@ -1136,6 +1177,7 @@ int main()
 	hidInit();			// input
 	gfxInitDefault();	// graphics
 	gfxSet3D(true);		// stereoscopy (true: enabled / false: disabled)
+	audio_init();
 	
 	counter=0;
 	
@@ -1193,6 +1235,7 @@ int main()
   while (aptMainLoop()&&(gamestate!=GAME_EXIT))
   {
 	circlePosition joy;
+	checkSoundFX();
 	
 	// Read which buttons are currently pressed or not
     hidScanInput();
@@ -1215,15 +1258,18 @@ int main()
 			if ((hidKeysDown() & KEY_DDOWN)||(hidKeysDown() & KEY_CPAD_DOWN)){
 				menu_item_selected++;
 				if (menu_item_selected > 1) menu_item_selected=0;
+				setSoundFX(TIC);
 			}
 	
 			if ((hidKeysDown() & KEY_DUP)||(hidKeysDown() & KEY_CPAD_UP)){
 				menu_item_selected--;
 				if (menu_item_selected < 0) menu_item_selected=1;
+				setSoundFX(TIC);
 			}
 
 			if ((hidKeysDown() & KEY_START)) //||(hidKeysDown() & KEY_A))
 			{
+				setSoundFX(DOUBLETIC);
 				if(menu_item_selected==0)
 				{
 					gamestate = GAME_RUNNING;
@@ -1253,15 +1299,18 @@ int main()
 			if ((hidKeysDown() & KEY_DDOWN)||(hidKeysDown() & KEY_CPAD_DOWN)){
 				menu_item_selected++;
 				if (menu_item_selected > 4) menu_item_selected=0;
+				setSoundFX(TIC);
 			}
 			
 			if ((hidKeysDown() & KEY_DUP)||(hidKeysDown() & KEY_CPAD_UP)){
 				menu_item_selected--;
 				if (menu_item_selected < 0) menu_item_selected=4;
+				setSoundFX(TIC);
 			}
 
 			if ((hidKeysDown() & KEY_START)) //||(hidKeysDown() & KEY_A))
 			{
+				setSoundFX(DOUBLETIC);
 				if(menu_item_selected!=4)
 				{
 					gamestate = GAME_RUNNING;
@@ -1313,6 +1362,7 @@ int main()
 					case IN_HYPERSPACE:
 						queue_message(10); // HYPERWARP ABORTED
 						warp_state = ABORTED;
+						//setSoundFX(HWOUT);
 						break;
 					case NOT_ENGAGED:						
 						while ((hyperwarp_target_sector_x < 0) || (hyperwarp_target_sector_y < 0) || (hyperwarp_target_sector_x >= GMAP_MAX_X) || (hyperwarp_target_sector_y >= GMAP_MAX_Y))
@@ -1342,8 +1392,19 @@ int main()
 						break;
 				}
 			}
-			if ((warp_state == NOT_ENGAGED)||(warp_speed < 65))
+			if ((warp_state == NOT_ENGAGED)||(warp_speed < 50))
 			{
+				if (red_alert)
+				{
+					queue_message(43);
+					queue_message(0);
+					queue_message(43);
+					queue_message(0);
+					queue_message(43);
+					setSoundFX(ALERT);
+					red_alert = false;
+				}
+				
 				if ((hidKeysDown() & KEY_START) || (hidKeysDown() & KEY_SELECT))
 				{
 					gamestate = GAME_RESUME;
@@ -1355,6 +1416,7 @@ int main()
 				}
 				if (hidKeysDown() & KEY_B){ // SHIELDS
 					shield = !shield;
+					setSoundFX(DOUBLETIC);
 					queue_message(shield?3:4);
 				}			
 				if (warp_state != ENGAGED)
@@ -1369,6 +1431,7 @@ int main()
 						if (docking_state == ESTABLISHED)
 						{
 							queue_message(15);
+							stopSoundFX(DOCKING);
 							docking_state = BROKEN;
 						}
 					}
@@ -1415,7 +1478,10 @@ int main()
 				if (bottomscreen_state==COCKPIT)
 				{
 					if (touch_down && (touch.px == 0) && (touch.py == 0))
+					{
 						computer = !computer;
+						setSoundFX(DOUBLETIC);
+					}
 				}
 			
 				if (bottomscreen_state==GALACTIC_MAP)
@@ -1495,6 +1561,7 @@ int main()
   }
   
 	// exit & return
+	audio_stop();
 	gfxExit();
 	hidExit();
 	aptExit();
@@ -1520,6 +1587,7 @@ void check_starbase_destroyed(int sec)
 				queue_message(9);
 				queue_message(0);
 				queue_message(9);
+				setSoundFX(MESSAGE);
 			}
 			gmap[target_starbase_x][target_starbase_y].layerA = 2;
 			if ((target_starbase_x == cruiser_sector_x)&&(target_starbase_y == cruiser_sector_y)) init_sector();
@@ -1619,13 +1687,13 @@ void heartbeat()
 
 		if (gamestate == GAME_RUNNING) 
 		{
-			
 			drain_energy(SECONDLY);
 			// end of hyperspace
 			if (warp_state == IN_HYPERSPACE)
 			{
 				if (hyperspace_ttr-- >= 0)
 				{
+					setSoundFX(TIC);
 					drain_energy(HYPERSPACE);
 				} else {
 					queue_message(11); // HYPERSPACE COMPLETE
@@ -1656,7 +1724,7 @@ void heartbeat()
 							
 							if (photon_rand<(10*game_level+50))
 							{
-								create_new_enemy_photont(render_object[i].mesh.Position);
+								if (gamestate == RUNNING) create_new_enemy_photont(render_object[i].mesh.Position);
 							}
 						}
 					}
@@ -1753,7 +1821,11 @@ void heartbeat()
 					}
 		if ((starbase_surrounded()> 0)&&!target_timer_running)
 		{
-			if (subspace_radio_avail()) queue_message(8);
+			if (subspace_radio_avail()) 
+			{
+				queue_message(8);
+				setSoundFX(MESSAGE);
+			}
 			starbase_destruction_timer = secs + 60;
 			target_timer_running = true;
 		}
@@ -1899,6 +1971,8 @@ void init_game()
 	rand_secs = 0;
 	energy = 9999.0; // to prevent messages
 	
+	red_alert = false;
+	
 	maxspeed = 9;
 	speed = 6;
 	
@@ -1907,6 +1981,7 @@ void init_game()
 	gamestate = GAME_SPLASH;
 	bottomscreen_state = NO_SCREEN;
 	warp_state = NOT_ENGAGED;
+	warp_sound = 0;
 	
 	for (i = 0; i < MAX_MESSAGES; i++)
 		messages[i] = -1;
@@ -1980,11 +2055,7 @@ void init_sector()
 					render_object[j].objecttype = TIE;
 				} 
 			}
-			queue_message(43);
-			queue_message(0);
-			queue_message(43);
-			queue_message(0);
-			queue_message(43);
+			red_alert = true;
 			break;
 		case 5: //set up starbase
 			j = get_enemie_slot();
@@ -2040,6 +2111,7 @@ void init_level(int level)
 	computer = true;
 	aborted = RUNNING;
 	target_starbase_valid = false;
+	red_alert = false;
 	
 	for (x=0; x<GMAP_MAX_X; x++)
 		for (y=0; y<GMAP_MAX_Y; y++)
@@ -2077,10 +2149,12 @@ void init_level(int level)
 	hyperwarp_target_sector_y = y;
 	
 	warp_state = NOT_ENGAGED;
+	warp_sound = 0;
 	game_level=level;
 	set_target_starbase();
 	init_sector();
 	heartbeat();	
+	setSoundFX(ENGINES);
 }
 	
 int get_initial_num_starbases(int level)
