@@ -6,7 +6,6 @@ Even though by now the 3DS game console is out of date and no longer commerciall
 So let's play!
 
 ## Things that still need to be done
-- the game lacks sound (I haven't had a chance to deal with 3DS audio yet)
 - the attack strategy of the enemies is not very sophisticated and happens rather randomly (in combat and strategy mode)
 - the soft renderer could be replaced by the 3DS hardware shader, but I fear that if the 3D rendering is too perfect, the 8-bit character will be lost. This is where my rudimentary and incomplete software renderer gives the feeling of a highly optimised home computer program from the 80s :-)
 - Fixing hundreds of bugs that, in my experience, lurk in such code
