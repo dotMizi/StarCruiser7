@@ -1724,7 +1724,7 @@ void heartbeat()
 							
 							if (photon_rand<(10*game_level+50))
 							{
-								if (gamestate == RUNNING) create_new_enemy_photont(render_object[i].mesh.Position);
+								create_new_enemy_photont(render_object[i].mesh.Position);
 							}
 						}
 					}
