@@ -1590,7 +1590,21 @@ void check_starbase_destroyed(int sec)
 				setSoundFX(MESSAGE);
 			}
 			gmap[target_starbase_x][target_starbase_y].layerA = 2;
-			if ((target_starbase_x == cruiser_sector_x)&&(target_starbase_y == cruiser_sector_y)) init_sector();
+			if ((target_starbase_x == cruiser_sector_x)&&(target_starbase_y == cruiser_sector_y)) 
+			{
+				int x, y, z;
+				int s = get_active_slot(STARBASE);
+				if (s >=0) 
+				{
+					x = (int)(render_object[s].mesh.Position.X);
+					y = (int)(render_object[s].mesh.Position.Y);
+					z = (int)(render_object[s].mesh.Position.Z);
+				}
+				init_sector();
+				if (s >=0) hit(x,y,z);
+				stopSoundFX(DOCKING);
+				docking_state = BROKEN;
+			}
 			overall_starbases_destroyed++;
 			target_timer_running = false;
 			target_starbase_valid = false;
