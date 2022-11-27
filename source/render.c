@@ -142,9 +142,8 @@ void draw_bottom_screen()
 	if (target_marker >= 0)
 	{
 		rho = VectorLength(render_object[target_marker].mesh.Position);
-		phi = (acos(render_object[target_marker].mesh.Position.Y/rho)/M_PI*2-1)*(-100);
-				
-		theta = atan2(render_object[target_marker].mesh.Position.Z, render_object[target_marker].mesh.Position.X)/M_PI;
+		phi = asin (render_object[target_marker].mesh.Position.Y/rho)*2/M_PI*90;
+		theta = atan2(render_object[target_marker].mesh.Position.X, render_object[target_marker].mesh.Position.Z)/M_PI*180;
 	}	
 	
 	switch(bottomscreen_state) {
@@ -160,25 +159,25 @@ void draw_bottom_screen()
 					fbAdr[((x*HEIGHT)+y)*3+2] = color_r[C_COCKPIT_BLUE];
 				}
 			sprintf(text, "MISSION TIME: %02d.%02d", game_time/60, game_time%60);
-			draw_text_XXL (text, fbAdr, 10, 35, C_WHITE, WIDTH_BOTTOM);
+			draw_text_XXL (text, fbAdr, 10, 30, C_WHITE, WIDTH_BOTTOM);
+			
 			if (target_marker >= 0)
 			{	
+				sprintf(text, "a:%+03d b:%+02d", (int)theta, (int)phi);
+				draw_text_XXL (text, fbAdr, (WIDTH_BOTTOM - strlen(text)*16)/2, 100, C_WHITE, WIDTH_BOTTOM);
 				if (rho < 9999)
 				{
-					sprintf(text, "a:%1.1f b:%+02d R:%+02d", theta, (int)phi, (int)rho);
+					sprintf(text, "R:%+d", ((int)rho)*((render_object[target_marker].mesh.Position.Z >= 0)?1:(-1)));
 				} else {
-					sprintf(text, "a:%+02d b:%+02d R:+g", (int)theta, (int)phi);
+					sprintf(text, "R:+g");
 				}
-			} else {
-				sprintf(text, "a:%d   b:   R:", target_marker);
-			}
+				draw_text_XXL (text, fbAdr, (WIDTH_BOTTOM - strlen(text)*16)/2, 65, C_WHITE, WIDTH_BOTTOM);
+			} 
 			
-			draw_text_XXL (text, fbAdr, 10, 75, C_WHITE, WIDTH_BOTTOM);
-			
-			draw_subsystem_state (fbAdr, 10, 115, true);
+			draw_subsystem_state (fbAdr, 10, 135, true);
 			
 			sprintf(text, "ENERGY:%04d UNITS", (int)energy);
-			draw_text_XXL (text, fbAdr, 10, 165, toggle_energy_color?C_RED:C_WHITE, WIDTH_BOTTOM);
+			draw_text_XXL (text, fbAdr, 10, 170, toggle_energy_color?C_RED:C_WHITE, WIDTH_BOTTOM);
 			if (warp_state == NOT_ENGAGED)
 			{
 				sprintf(text, "VEL:%02d METRONS/S", velocity[speed]);
@@ -322,7 +321,7 @@ void draw_bottom_screen()
 				draw_text (text2, fbAdr, 15, 115, C_WHITE, WIDTH_BOTTOM);
 
 			}
-			sprintf(text2, "STARBASE TARGET AT %d %d TINE (%d:%d)",target_starbase_x, target_starbase_y, game_time/60, game_time%60);
+			sprintf(text2, "TARGET a:%+02d b:%+02d R%+d", (int)theta, (int)phi, (int) rho);
 			draw_text (text2, fbAdr, 15, 100, C_WHITE, WIDTH_BOTTOM);
 			sprintf(text2, "TIMER %d RUNNING %s",starbase_destruction_timer, target_timer_running?"TRUE":"FALSE");
 			draw_text (text2, fbAdr, 15, 85, C_WHITE, WIDTH_BOTTOM);
@@ -330,6 +329,11 @@ void draw_bottom_screen()
 			draw_text (text2, fbAdr, 15, 70, C_WHITE, WIDTH_BOTTOM);
 			sprintf(text2, "%d ENEMY (%d %d): TTM %d", (int)secs, hyperwarp_target_sector_x, hyperwarp_target_sector_y, (int)gmap[hyperwarp_target_sector_x][hyperwarp_target_sector_y].ttm);
 			draw_text (text2, fbAdr, 15, 55, C_WHITE, WIDTH_BOTTOM);
+			if (target_marker >= 0)
+			{
+				sprintf(text2, "TARGET AT %f",VectorLength(render_object[target_marker].mesh.Position));
+				draw_text (text2, fbAdr, 15, 40, C_WHITE, WIDTH_BOTTOM);
+			}
 			/*
 			sprintf(text3, "      %d %d %d %d %d", messages[5], messages[6], messages[7], messages[8], messages[9]);
 			draw_text ("*", fbAdr, 5, 130, C_WHITE, WIDTH_BOTTOM);
