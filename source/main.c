@@ -334,7 +334,7 @@ int starbase_surrounded()
 					(gmap[x+1][y].layerA != 0)&&
 					(gmap[x][y-1].layerA != 0)&&
 					(gmap[x][y+1].layerA != 0)
-				)	return (x*y);
+				)	return (x*GMAP_MAX_X+y);
 	return (0);
 }
 
@@ -1061,8 +1061,47 @@ void rotate(circlePosition joy)
 
 void game_tasks()
 {
+	int i, j;
 	checkSoundFX();
 	heartbeat();
+	
+	// run strategic movement
+	if (!target_starbase_valid) set_target_starbase();	
+		
+	for (i=0; i<GMAP_MAX_X; i++)
+		for (j=0; j<GMAP_MAX_Y; j++)
+			if ((gmap[i][j].layerA > 0)&&(gmap[i][j].layerA < 5))
+				if (gmap[i][j].ttm < secs)
+				{
+					gmap[i][j].ttm += (60-game_level*5);
+					if (!target_timer_running)
+						if (!((i == cruiser_sector_x)&&(j == cruiser_sector_y))&&(rand()%((gmap[i][j].layerA*2)+1) < 4)&&!gmap[i][j].moved)
+						{
+							int t = move_on_gmap(i,j,0);
+						
+							if ((t<0)&&(rand()%100 > 90)) t = move_on_gmap(i,j,1);
+					
+							if (t>0)
+							{
+								gmap[t%GMAP_MAX_X][t/GMAP_MAX_X].layerA = gmap[i][j].layerA;
+								gmap[t%GMAP_MAX_X][t/GMAP_MAX_X].ttm = gmap[i][j].ttm;
+								gmap[i][j].layerA = 0;
+								gmap[t%GMAP_MAX_X][t/GMAP_MAX_X].moved = true;
+								if ((t%GMAP_MAX_X == cruiser_sector_x)&&(t/GMAP_MAX_X == cruiser_sector_y)) init_sector();							}				
+						}
+				}
+	if ((starbase_surrounded()> 0)&&!target_timer_running)
+	{
+		if (subspace_radio_avail()) 
+		{
+			queue_message(8);
+			setSoundFX(MESSAGE);
+		}
+		starbase_destruction_timer = secs + 60;
+		target_timer_running = true;
+	}
+	
+	
 	move_stars();
 	if ((aborted == RUNNING)&&(gamestate == GAME_RUNNING))
 	{
@@ -1574,11 +1613,28 @@ int countdown()
 	return(starbase_destruction_timer-secs);
 }
 
-void check_starbase_destroyed(int sec)
+void check_starbase_destroyed()
 {
+	if (starbase_surrounded() > 0)
+	{
+		target_starbase_x = starbase_surrounded()/GMAP_MAX_X;
+		target_starbase_y = starbase_surrounded()%GMAP_MAX_X;
+		if ((target_starbase_x > 0) && (target_starbase_x < GMAP_MAX_X) && (target_starbase_y > 0) && (target_starbase_y < GMAP_MAX_Y))
+		{
+			target_starbase_valid = true;
+			if (!target_timer_running)
+			{
+				starbase_destruction_timer = secs + 60;
+				target_timer_running = true;
+			}
+		}
+	} else {
+		target_timer_running = false;
+	}
+	
 	if (target_starbase_valid)
 	{
-		if (starbase_surrounded()&&(starbase_destruction_timer < sec))
+		if (is_starbase_surrounded(target_starbase_x, target_starbase_y)&&(countdown() < 0)) //if (starbase_surrounded()&&(starbase_destruction_timer < sec))
 		{
 			if (subspace_radio_avail())
 			{
@@ -1590,6 +1646,7 @@ void check_starbase_destroyed(int sec)
 				setSoundFX(MESSAGE);
 			}
 			gmap[target_starbase_x][target_starbase_y].layerA = 2;
+			gmap[target_starbase_x][target_starbase_y].ttm = secs + rand()%(60-game_level*5);
 			if ((target_starbase_x == cruiser_sector_x)&&(target_starbase_y == cruiser_sector_y)) 
 			{
 				int x, y, z;
@@ -1672,7 +1729,7 @@ void heartbeat()
 		counter++;
 		
 		copygmap();
-		check_starbase_destroyed(secs);
+		check_starbase_destroyed();
 		
 		// handle messages
 		
@@ -1805,45 +1862,6 @@ void heartbeat()
 		maneuver();
 		last_secs9 = secs;
 		rand_secs = rand()%(5-game_level)+2;
-	}
-	
-	if ((last_secs_min + 60 - (game_level*5)) <= secs)
-	{
-		// run strategic task
-		if (!target_starbase_valid) set_target_starbase();	
-		
-		if (!target_timer_running)
-			for (i=0; i<GMAP_MAX_X; i++)
-				for (j=0; j<GMAP_MAX_Y; j++)
-					if ((gmap[i][j].layerA > 0)&&(gmap[i][j].layerA < 5))
-					{
-						if (!((i == cruiser_sector_x)&&(j == cruiser_sector_y))&&(rand()%((gmap[i][j].layerA*2)+1) < 4)&&!gmap[i][j].moved)
-						{
-							int t = move_on_gmap(i,j,0);
-							int tmp;
-							if ((t<0)&&(rand()%100 > 90)) t = move_on_gmap(i,j,1);
-						
-							if (t>9)
-							{
-								tmp = gmap[i][j].layerA;
-								gmap[i][j].layerA = 0;
-								gmap[t%GMAP_MAX_X][t/GMAP_MAX_X].layerA = tmp;
-								gmap[t%GMAP_MAX_X][t/GMAP_MAX_X].moved = true;
-								if ((t%GMAP_MAX_X == cruiser_sector_x)&&(t/GMAP_MAX_X == cruiser_sector_y)) init_sector();
-							}				
-						}
-					}
-		if ((starbase_surrounded()> 0)&&!target_timer_running)
-		{
-			if (subspace_radio_avail()) 
-			{
-				queue_message(8);
-				setSoundFX(MESSAGE);
-			}
-			starbase_destruction_timer = secs + 60;
-			target_timer_running = true;
-		}
-		last_secs_min = secs;
 	}
 
 	t_last = t_act;
@@ -2129,8 +2147,13 @@ void init_level(int level)
 	
 	for (x=0; x<GMAP_MAX_X; x++)
 		for (y=0; y<GMAP_MAX_Y; y++)
+		{
 			gmap[x][y].layerA = 0;
-
+			gmap[x][y].layerB = 0;
+			gmap[x][y].moved = false;
+			gmap[x][y].ttm = 30;			 
+		}
+		
 	for (i=0; i < get_initial_num_starbases(level); i++)
 	{
 		do {
@@ -2150,6 +2173,7 @@ void init_level(int level)
 			} while ((gmap[x][y].layerA != 0)&&(starbase_surrounded() ==0));
 			
 			gmap[x][y].layerA = j;
+			gmap[x][y].ttm = secs + rand()%(60-game_level*5);
 		}
 		
 	do {

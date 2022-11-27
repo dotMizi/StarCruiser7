@@ -313,19 +313,24 @@ void draw_bottom_screen()
 		case DEBUG_SCREEN:
 			draw_block(fbAdr, 0, 0, WIDTH_BOTTOM, HEIGHT, C_BLACK, WIDTH_BOTTOM);
 			draw_text_XXL ("DEBUG", fbAdr, (WIDTH_BOTTOM - 5*16)/2, HEIGHT - 21, C_WHITE, WIDTH_BOTTOM);
-			draw_text ("m", fbAdr, (WIDTH_BOTTOM - 8)/2, (HEIGHT - 8)/2, (int)(color_b[shield_active?C_ASTEROID_SHIELD:C_ASTEROID]), WIDTH_BOTTOM);
-			
-			float a, xk, yk;
-			for (a = 0; a < 2*M_PI; a+=0.1)
+			int sb = starbase_surrounded();
+			if (sb > 0)
 			{
-				xk = 20*cos(a) + WIDTH_BOTTOM/2;
-				yk = 20*sin(a) + HEIGHT/2;
-				fbAdr[((((int)xk)*HEIGHT)+(int)yk)*3+0] = color_b[C_YELLOW];
-				fbAdr[((((int)xk)*HEIGHT)+(int)yk)*3+1] = color_g[C_YELLOW];
-				fbAdr[((((int)xk)*HEIGHT)+(int)yk)*3+2] = color_r[C_YELLOW];
-			}
+				sprintf(text2, "STARBASE SURROUNDED AT %d (%d %d)",sb, sb/GMAP_MAX_X, sb%GMAP_MAX_X);
+				draw_text (text2, fbAdr, 15, 130, C_WHITE, WIDTH_BOTTOM);
+				sprintf(text2, "TIME TO DESTRUCTION %d",countdown());
+				draw_text (text2, fbAdr, 15, 115, C_WHITE, WIDTH_BOTTOM);
 
-			sprintf(text2, "I: %d %d %d %d %d %d", message_index, messages[0], messages[1], messages[2], messages[3], messages[4]);
+			}
+			sprintf(text2, "STARBASE TARGET AT %d %d TINE (%d:%d)",target_starbase_x, target_starbase_y, game_time/60, game_time%60);
+			draw_text (text2, fbAdr, 15, 100, C_WHITE, WIDTH_BOTTOM);
+			sprintf(text2, "TIMER %d RUNNING %s",starbase_destruction_timer, target_timer_running?"TRUE":"FALSE");
+			draw_text (text2, fbAdr, 15, 85, C_WHITE, WIDTH_BOTTOM);
+			sprintf(text2, "#ENEMIES %d",get_num_of_enemies());
+			draw_text (text2, fbAdr, 15, 70, C_WHITE, WIDTH_BOTTOM);
+			sprintf(text2, "%d ENEMY (%d %d): TTM %d", (int)secs, hyperwarp_target_sector_x, hyperwarp_target_sector_y, (int)gmap[hyperwarp_target_sector_x][hyperwarp_target_sector_y].ttm);
+			draw_text (text2, fbAdr, 15, 55, C_WHITE, WIDTH_BOTTOM);
+			/*
 			sprintf(text3, "      %d %d %d %d %d", messages[5], messages[6], messages[7], messages[8], messages[9]);
 			draw_text ("*", fbAdr, 5, 130, C_WHITE, WIDTH_BOTTOM);
 			draw_text ("*", fbAdr, 5, 121, C_WHITE, WIDTH_BOTTOM);
@@ -344,7 +349,7 @@ void draw_bottom_screen()
 			{
 				sprintf (text1, "X: %d Y: %d Z: %d", (int)render_object[ASlot].mesh.Position.X, (int)render_object[ASlot].mesh.Position.Y, (int)render_object[ASlot].mesh.Position.Z);
 				draw_text (text1, fbAdr, 5, 21, C_WHITE, WIDTH_BOTTOM);
-			}
+			}*/
 			break;
 		default:
 			bottomscreen_state = NO_SCREEN;

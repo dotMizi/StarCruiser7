@@ -33,6 +33,7 @@ typedef struct gmapentry {
 	int layerA;
 	int layerB;
 	bool moved;
+	time_t ttm;
 } gmapentry;
 
 typedef struct floater{
@@ -125,9 +126,17 @@ extern void hit(int x, int y, int z);
 extern int get_enemie_slot();
 extern bool game_over_display_on();
 
+extern get_num_of_enemies();
+
+extern int starbase_surrounded();
+extern bool is_starbase_surrounded(int x, int y);
+extern int countdown();
+extern time_t secs;
+
 extern int target_starbase_x;
 extern int target_starbase_y;
 extern bool target_starbase_valid;
 extern int starbase_destruction_timer;
+extern bool target_timer_running;
 extern int countdown();
 extern int get_rank_m();
