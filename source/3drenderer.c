@@ -136,7 +136,7 @@ void Render (Mesh mesh, bool view, enum object_type type)
 {
 	int i;
 
-	mesh.BackPosition.X = mesh.Position.X * (-1);
+	mesh.BackPosition.X = mesh.Position.X; 
 	mesh.BackPosition.Z = mesh.Position.Z * (-1);
 	mesh.BackPosition.Y = mesh.Position.Y;	
 	if (view?(mesh.Position.Z <= 0):(mesh.BackPosition.Z <= 0)) return;
