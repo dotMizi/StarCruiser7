@@ -310,50 +310,27 @@ void draw_bottom_screen()
 				}
 			break;
 		case DEBUG_SCREEN:
+			
 			draw_block(fbAdr, 0, 0, WIDTH_BOTTOM, HEIGHT, C_BLACK, WIDTH_BOTTOM);
 			draw_text_XXL ("DEBUG", fbAdr, (WIDTH_BOTTOM - 5*16)/2, HEIGHT - 21, C_WHITE, WIDTH_BOTTOM);
 			int sb = starbase_surrounded();
 			if (sb > 0)
 			{
-				sprintf(text2, "STARBASE SURROUNDED AT %d (%d %d)",sb, sb/GMAP_MAX_X, sb%GMAP_MAX_X);
+				x = sb/GMAP_MAX_X;
+				y = sb%GMAP_MAX_X;
+				sprintf(text2, "STARBASE SURROUNDED AT %d (%d %d)",sb, x, y);
 				draw_text (text2, fbAdr, 15, 130, C_WHITE, WIDTH_BOTTOM);
 				sprintf(text2, "TIME TO DESTRUCTION %d",countdown());
 				draw_text (text2, fbAdr, 15, 115, C_WHITE, WIDTH_BOTTOM);
+				
+				sprintf(text2, "          (%d,%d):%d", x,y+1,gmap[x][y+1].layerA);
+				draw_text (text2, fbAdr, 15, 100, C_WHITE, WIDTH_BOTTOM);
+				sprintf(text2, "(%d,%d):%d          (%d,%d):%d", x-1,y,gmap[x-1][y].layerA, x+1,y,gmap[x+1][y].layerA);
+				draw_text (text2, fbAdr, 15, 85, C_WHITE, WIDTH_BOTTOM);
+				sprintf(text2, "          (%d,%d):%d", x,y-1,gmap[x][y-1].layerA);
+				draw_text (text2, fbAdr, 15, 70, C_WHITE, WIDTH_BOTTOM);
 
 			}
-			sprintf(text2, "TARGET a:%+02d b:%+02d R%+d", (int)theta, (int)phi, (int) rho);
-			draw_text (text2, fbAdr, 15, 100, C_WHITE, WIDTH_BOTTOM);
-			sprintf(text2, "TIMER %d RUNNING %s",starbase_destruction_timer, target_timer_running?"TRUE":"FALSE");
-			draw_text (text2, fbAdr, 15, 85, C_WHITE, WIDTH_BOTTOM);
-			sprintf(text2, "#ENEMIES %d",get_num_of_enemies());
-			draw_text (text2, fbAdr, 15, 70, C_WHITE, WIDTH_BOTTOM);
-			sprintf(text2, "%d ENEMY (%d %d): TTM %d", (int)secs, hyperwarp_target_sector_x, hyperwarp_target_sector_y, (int)gmap[hyperwarp_target_sector_x][hyperwarp_target_sector_y].ttm);
-			draw_text (text2, fbAdr, 15, 55, C_WHITE, WIDTH_BOTTOM);
-			if (target_marker >= 0)
-			{
-				sprintf(text2, "TARGET AT %f",VectorLength(render_object[target_marker].mesh.Position));
-				draw_text (text2, fbAdr, 15, 40, C_WHITE, WIDTH_BOTTOM);
-			}
-			/*
-			sprintf(text3, "      %d %d %d %d %d", messages[5], messages[6], messages[7], messages[8], messages[9]);
-			draw_text ("*", fbAdr, 5, 130, C_WHITE, WIDTH_BOTTOM);
-			draw_text ("*", fbAdr, 5, 121, C_WHITE, WIDTH_BOTTOM);
-			draw_text ("*", fbAdr, 5, 112, C_WHITE, WIDTH_BOTTOM);
-			draw_text ("*", fbAdr, 5, 103, C_WHITE, WIDTH_BOTTOM);
-			draw_text ("*", fbAdr, 5, 94, C_WHITE, WIDTH_BOTTOM);
-			draw_text (text2, fbAdr, 15, 130, C_WHITE, WIDTH_BOTTOM);
-			draw_text (text3, fbAdr, 15, 121, C_WHITE, WIDTH_BOTTOM);
-			draw_text (message1, fbAdr, 15, 112, C_WHITE, WIDTH_BOTTOM);
-			draw_text (message2, fbAdr, 15, 103, C_WHITE, WIDTH_BOTTOM);
-			draw_text (act_message, fbAdr, 15, 94, C_RED, WIDTH_BOTTOM);
-
-			sprintf(text, "ASLOT: %d %s %d", ASlot, (blink_3s_on)?"TRUE":"FALSE", counter);
-			draw_text (text, fbAdr, 5, 30, C_WHITE, WIDTH_BOTTOM);
-			if (ASlot >= 0)
-			{
-				sprintf (text1, "X: %d Y: %d Z: %d", (int)render_object[ASlot].mesh.Position.X, (int)render_object[ASlot].mesh.Position.Y, (int)render_object[ASlot].mesh.Position.Z);
-				draw_text (text1, fbAdr, 5, 21, C_WHITE, WIDTH_BOTTOM);
-			}*/
 			break;
 		default:
 			bottomscreen_state = NO_SCREEN;

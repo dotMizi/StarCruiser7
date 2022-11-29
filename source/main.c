@@ -330,10 +330,10 @@ int starbase_surrounded()
 		for(y=1; y<7; y++)
 			if(gmap[x][y].layerA == 5)
 				if(
-					(gmap[x-1][y].layerA != 0)&&
-					(gmap[x+1][y].layerA != 0)&&
-					(gmap[x][y-1].layerA != 0)&&
-					(gmap[x][y+1].layerA != 0)
+					(gmap[x-1][y].layerA > 0)&&
+					(gmap[x+1][y].layerA > 0)&&
+					(gmap[x][y-1].layerA > 0)&&
+					(gmap[x][y+1].layerA > 0)
 				)	return (x*GMAP_MAX_X+y);
 	return (0);
 }
@@ -341,10 +341,10 @@ int starbase_surrounded()
 bool is_starbase_surrounded(int x, int y)
 {
 	if(
-		(gmap[x-1][y].layerA != 0)&&
-		(gmap[x+1][y].layerA != 0)&&
-		(gmap[x][y-1].layerA != 0)&&
-		(gmap[x][y+1].layerA != 0)
+		(gmap[x-1][y].layerA > 0)&&
+		(gmap[x+1][y].layerA > 0)&&
+		(gmap[x][y-1].layerA > 0)&&
+		(gmap[x][y+1].layerA > 0)
 	)	return true;
 	return false;
 }
@@ -443,8 +443,8 @@ void queue_message(int message)
 void damage(int damagelevel)
 {
 	int component = rand()%(7);
-	int grade = (10*game_level+50)/((shield&&shield_avail())?4:1);
-	int ran = rand()%(100);
+	int grade = (10*game_level+50)/((shield&&shield_avail())?4:1); 
+	int ran = rand()%(200);
 	bool damaged = (ran<grade);
 	
 	if (damagelevel > 0) return;
@@ -461,7 +461,7 @@ void damage(int damagelevel)
 	{
 		if (damaged)
 		{
-			overall_damage_count += 7;
+			if (damagelevel == 0) overall_damage_count += 7;
 			if (overall_damage_count > 100)
 			{
 			}
@@ -1444,7 +1444,7 @@ int main()
 					red_alert = false;
 				}
 				
-				if ((hidKeysDown() & KEY_START) || (hidKeysDown() & KEY_SELECT))
+				if (hidKeysDown() & KEY_START)
 				{
 					gamestate = GAME_RESUME;
 					break;
@@ -1482,6 +1482,9 @@ int main()
 						speed--;
 					}
 					if (speed < 0) speed = 0;
+				}
+				if (hidKeysDown() & KEY_SELECT){
+					bottomscreen_state = DEBUG_SCREEN;
 				}
 				if (hidKeysDown() & KEY_DRIGHT){
 					if(bottomscreen_state==COCKPIT) {
@@ -1731,6 +1734,27 @@ void heartbeat()
 		copygmap();
 		check_starbase_destroyed();
 		
+		for (i=0; i < MAX_NUM_OF_ENEMIES; i++)
+		{
+			if (render_object[i].active)
+			{
+				if ((render_object[i].objecttype == TIE) ||
+					(render_object[i].objecttype == RAIDER) ||
+					(render_object[i].objecttype == ZYLONBASE))
+					{
+						if(VectorLength(render_object[i].mesh.Position) < FIRE_RANGE) 
+						{
+							int photon_rand = rand()%(300);
+							
+							if (photon_rand<(10*game_level+50))  // gl0:50 gl1:60 gl2:70 gl3:80
+							{
+								create_new_enemy_photont(render_object[i].mesh.Position);
+							}
+						}
+					}
+			}
+		}
+		
 		// handle messages
 		
 		if (messages[message_index] < sizeof(message_text)/sizeof(message_text[0]))
@@ -1781,26 +1805,7 @@ void heartbeat()
 	{
 		// call 3-secondly tasks
 		blink_3s_on = !blink_3s_on;
-		for (i=0; i < MAX_NUM_OF_ENEMIES; i++)
-		{
-			if (render_object[i].active)
-			{
-				if ((render_object[i].objecttype == TIE) ||
-					(render_object[i].objecttype == RAIDER) ||
-					(render_object[i].objecttype == ZYLONBASE))
-					{
-						if(VectorLength(render_object[i].mesh.Position) < FIRE_RANGE) 
-						{
-							int photon_rand = rand()%(100);
-							
-							if (photon_rand<(10*game_level+50))
-							{
-								create_new_enemy_photont(render_object[i].mesh.Position);
-							}
-						}
-					}
-			}
-		}
+		
 		if (gamestate == GAME_END)
 		{
 			switch (aborted)
