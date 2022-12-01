@@ -35,6 +35,8 @@ X button - X switches between front and aft view.
 
 Y button - Y activates or cancels the hyperwarp sequence.
 
+L and R buttons - pressing L or R locks the target. Without target lock, the attack computer always displays the target of the shortest distance. This may change quickly as all enemies are on the move. The target lock fixes a target until it is destroyed. R switches to the next target, L switches backwards.
+
 Start button - The Start button activates a selected menu item or activates the Cancel menu in the game.
 
 Touch screen - Tapping on the cockpit view activates or deactivates the attack computer. Tapping the Galactic Map selects a sector for the hyperwarp. 
