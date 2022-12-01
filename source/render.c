@@ -161,7 +161,7 @@ void draw_bottom_screen()
 			sprintf(text, "MISSION TIME: %02d.%02d", game_time/60, game_time%60);
 			draw_text_XXL (text, fbAdr, 10, 30, C_WHITE, WIDTH_BOTTOM);
 			
-			if (target_marker >= 0)
+			if ((target_marker >= 0)&&((computer)&&(computer_avail()))) 
 			{	
 				sprintf(text, "a:%+03d b:%+02d", (int)theta, (int)phi);
 				draw_text_XXL (text, fbAdr, (WIDTH_BOTTOM - strlen(text)*16)/2, 100, C_WHITE, WIDTH_BOTTOM);

@@ -538,6 +538,15 @@ void damage(int damagelevel)
 	}
 }
 
+Vector3 face_to(Vector3 act_view, Vector3 dir)
+{
+	float rho = VectorLength(dir);
+	float phi = asin (dir.Y/rho); //-90 - 90
+	float theta = atan2(dir.X, dir.Z); //-180 - +180
+	
+	return (Vector3) {phi,theta, 0.0,0};
+}
+
 void move_objects()
 {
 	int i;
@@ -622,7 +631,13 @@ void move_objects()
 			(render_object[i].objecttype == RAIDER) ||
 			(render_object[i].objecttype == STARBASE) ||
 			(render_object[i].objecttype == ZYLONBASE))
+			{
+				if (render_object[i].objecttype != STARBASE)
+				{
+					render_object[i].mesh.Rotation = face_to(render_object[i].mesh.Rotation, (Vector3) {render_object[i].move.x,render_object[i].move.y,render_object[i].move.z,0});
+				}
 				if (VectorLength(render_object[i].mesh.Position) < 100) render_object[i].mesh.Position = VectorScalar(VectorNormal(render_object[i].mesh.Position),100);
+			}
 	}
 }
 
@@ -704,7 +719,9 @@ void move_shuttle()
 	int i = get_active_slot(SHUTTLE);
 	
 	if (i >= 0)
-	{
+	{	
+		render_object[i].mesh.Rotation = face_to(render_object[i].mesh.Rotation, (Vector3) {render_object[i].move.x,render_object[i].move.y,render_object[i].move.z,0});
+		
 		switch (docking_state)
 		{
 			case ESTABLISHED:
