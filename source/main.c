@@ -79,6 +79,8 @@ int hyperspace_ttr;
 
 bool red_alert = false;
 
+int target_lock;
+
 floater asteroid;
 
 int game_level;
@@ -259,6 +261,62 @@ void set_subspace_radio_state(enum subsystem_states state)
 enum subsystem_states get_subspace_radio_state()
 {
 	return subspace_radio_state;
+}
+
+void lock_next_target(bool succ)
+{
+	if (target_lock < 0)
+	{
+		target_lock = locked_target();
+	} else {
+		int i = target_lock;
+		
+		do {
+			succ?i++:i--;
+			if (i < 0) i = MAX_NUM_OF_ENEMIES-1;
+			if (i >= MAX_NUM_OF_ENEMIES) i = 0;
+		} while (((render_object[i].objecttype != TIE) ||
+			(render_object[i].objecttype != RAIDER) ||
+			(render_object[i].objecttype != ZYLONBASE) ||
+			(render_object[i].objecttype != STARBASE)) && 
+			(!render_object[i].active));
+		target_lock = i;
+	}
+}
+
+int locked_target()
+{
+	float target_dist = INFINITY;
+	int i, target_marker = -1;
+	
+	if (target_lock >= 0)
+		if (render_object[i].active)
+		{
+			if ((render_object[i].objecttype == TIE) ||
+			(render_object[i].objecttype == RAIDER) ||
+			(render_object[i].objecttype == ZYLONBASE) ||
+			(render_object[i].objecttype == STARBASE))
+			{
+				return target_lock;
+			} else target_lock = -1;
+		} else target_lock = -1;
+	
+	for (i = 0; i < MAX_NUM_OF_ENEMIES; i++)
+		if (render_object[i].active) 
+		{
+			if ((render_object[i].objecttype == TIE) ||
+			(render_object[i].objecttype == RAIDER) ||
+			(render_object[i].objecttype == ZYLONBASE) ||
+			(render_object[i].objecttype == STARBASE))
+			{
+				if(VectorLength(render_object[i].mesh.Position) < target_dist) 
+				{
+					target_marker = i;
+					target_dist = VectorLength(render_object[i].mesh.Position);
+				}
+			}
+		}
+	return target_marker;
 }
 
 int get_enemie_slot()
@@ -1411,6 +1469,8 @@ int main()
 		case GAME_RUNNING:	
 			menu_item_selected = 0;
 			game_tasks();
+			if (hidKeysDown() & KEY_R) lock_next_target(true);
+			if (hidKeysDown() & KEY_L) lock_next_target(false);
 			if (hidKeysDown() & KEY_Y){ // HYPERWARP
 				
 				switch(warp_state) {
@@ -2024,6 +2084,7 @@ void init_game()
 	last_secs_min = 0;
 	rand_secs = 0;
 	energy = 9999.0; // to prevent messages
+	target_lock = -1;
 	
 	red_alert = false;
 	
@@ -2074,6 +2135,7 @@ void init_sector()
 {
 	int i, j;
 	docking_state = NONE;
+	target_lock = -1;
 	
 	for (i=0; i<MAX_NUM_OF_ENEMIES; i++) //clear all enemy slots 
 	{
@@ -2166,6 +2228,7 @@ void init_level(int level)
 	aborted = RUNNING;
 	target_starbase_valid = false;
 	red_alert = false;
+	target_lock = -1;
 	
 	for (x=0; x<GMAP_MAX_X; x++)
 		for (y=0; y<GMAP_MAX_Y; y++)

@@ -27,7 +27,6 @@
 int focal_distance;
 int menu_item_selected = 0;
 int tx, ty;
-int target_marker=-1;
 float theta;
 float phi;
 float rho = INFINITY;
@@ -136,9 +135,10 @@ void draw_bottom_screen()
 	char text2[81];
 	char text3[81];
 	int game_time=0;
-	int c,i,j,x,y;
+	int c,i,j,x,y, target_marker;
 	
 	game_time = t_act.tv_sec - t_game.tv_sec;
+	target_marker = locked_target();
 	if (target_marker >= 0)
 	{
 		rho = VectorLength(render_object[target_marker].mesh.Position);
@@ -375,23 +375,10 @@ void draw_top_screen()
 		if (gamestate == GAME_RUNNING)
 		{
 			int i;
-			target_marker = -1;
 			setFrameBuffer(fbAdr_L, fbAdr_R);
 			for (i = 0; i < MAX_NUM_OF_ENEMIES; i++)
 				if (render_object[i].active) 
 				{
-					if ((render_object[i].objecttype == TIE) ||
-					(render_object[i].objecttype == RAIDER) ||
-					(render_object[i].objecttype == ZYLONBASE) ||
-					(render_object[i].objecttype == STARBASE))
-					{
-						if(VectorLength(render_object[i].mesh.Position) < target_dist) 
-						{
-							target_marker = i;
-							target_dist = VectorLength(render_object[i].mesh.Position);
-						}
-					}
-
 					if(VectorLength(render_object[i].mesh.Position) > 20)
 					{
 						if (warp_speed <= 65) Render(render_object[i].mesh, front_view, render_object[i].objecttype);
@@ -478,11 +465,16 @@ void draw_top_screen()
 	// draw attack computer
     if ((computer)&&(computer_avail())) 
 	{
-		
-		int posX = (int)(focal_distance * 2 * render_object[target_marker].mesh.Position.X / render_object[target_marker].mesh.Position.Z * (render_object[target_marker].mesh.Position.Z/abs(render_object[target_marker].mesh.Position.Z)))+WIDTH_TOP/2;	
-		int posY = (int)(focal_distance * 2 * render_object[target_marker].mesh.Position.Y / render_object[target_marker].mesh.Position.Z * (render_object[target_marker].mesh.Position.Z/abs(render_object[target_marker].mesh.Position.Z)))+HEIGHT/2;
+		if (locked_target() >= 0)
+		{
+			int target_marker = locked_target();
+			int posX = (int)(focal_distance * 2 * render_object[target_marker].mesh.Position.X / render_object[target_marker].mesh.Position.Z * (render_object[target_marker].mesh.Position.Z/abs(render_object[target_marker].mesh.Position.Z)))+WIDTH_TOP/2;	
+			int posY = (int)(focal_distance * 2 * render_object[target_marker].mesh.Position.Y / render_object[target_marker].mesh.Position.Z * (render_object[target_marker].mesh.Position.Z/abs(render_object[target_marker].mesh.Position.Z)))+HEIGHT/2;
 
-		draw_computer(fbAdr_L, fbAdr_R, (target_marker >= 0)?true:false, (render_object[target_marker].mesh.Position.Z > 0)?true:false, posX, posY);
+			draw_computer(fbAdr_L, fbAdr_R, true, (render_object[target_marker].mesh.Position.Z > 0)?true:false, posX, posY);
+		} else {
+			draw_computer(fbAdr_L, fbAdr_R, false, false, 0, 0);
+		}
 	}
 }
 
