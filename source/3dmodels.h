@@ -36,10 +36,6 @@ typedef struct Mesh{
 	Vector3 Rotation;
 } Mesh;
 
-extern int num_of_cube_vertexes;
-extern Vertex CubeV[];
-extern int num_of_cube_faces;
-extern Face CubeF[];
 extern int num_of_work_vertexes;
 extern Vertex VWork[];
 extern int num_of_tie_vertexes;
@@ -66,10 +62,15 @@ extern Vertex StarbaseV[];
 extern Face StarbaseF[];
 extern int num_of_starbase_vertexes;
 extern int num_of_starbase_faces;
+extern Vertex ZylV[];
+extern Face ZylF[];
+extern int num_of_zyl_vertexes;
+extern int num_of_zyl_faces;
 
-extern struct Mesh Cube;
+extern struct Mesh TieFighter;
 extern struct Mesh Shuttle;
 extern struct Mesh Asteroid;
 extern struct Mesh PhotonT;
 extern struct Mesh Starbase;
+extern struct Mesh ZylonFighter;
 #endif

@@ -160,6 +160,16 @@ struct floater render_object[MAX_NUM_OF_ENEMIES];
 star stars[NUM_STARS];
 star trail_stars[NUM_STARS];
 
+float rand_range(int max, int min)
+{
+	float range = 0;
+	while ((abs(range) < min) || (abs(range) > max))
+	{	
+		range = (int)(((((float)(rand()%100))/100)*(max-min)+min)*((rand()%3)-1));
+	}
+	return range;
+}
+
 enum subsystem_states computer_state;
 bool computer_avail()
 {
@@ -275,7 +285,7 @@ void lock_next_target(bool succ)
 			succ?i++:i--;
 			if (i < 0) i = MAX_NUM_OF_ENEMIES-1;
 			if (i >= MAX_NUM_OF_ENEMIES) i = 0;
-		} while (((render_object[i].objecttype != TIE) ||
+		} while (((render_object[i].objecttype != FIGHTER) ||
 			(render_object[i].objecttype != RAIDER) ||
 			(render_object[i].objecttype != ZYLONBASE) ||
 			(render_object[i].objecttype != STARBASE)) && 
@@ -292,7 +302,7 @@ int locked_target()
 	if (target_lock >= 0)
 		if (render_object[i].active)
 		{
-			if ((render_object[i].objecttype == TIE) ||
+			if ((render_object[i].objecttype == FIGHTER) ||
 			(render_object[i].objecttype == RAIDER) ||
 			(render_object[i].objecttype == ZYLONBASE) ||
 			(render_object[i].objecttype == STARBASE))
@@ -304,7 +314,7 @@ int locked_target()
 	for (i = 0; i < MAX_NUM_OF_ENEMIES; i++)
 		if (render_object[i].active) 
 		{
-			if ((render_object[i].objecttype == TIE) ||
+			if ((render_object[i].objecttype == FIGHTER) ||
 			(render_object[i].objecttype == RAIDER) ||
 			(render_object[i].objecttype == ZYLONBASE) ||
 			(render_object[i].objecttype == STARBASE))
@@ -645,7 +655,7 @@ void move_objects()
 				int j;
 				for (j=0; j < MAX_NUM_OF_ENEMIES; j++) //check photon torpedo hit
 				{
-					if ((render_object[j].objecttype == TIE) ||
+					if ((render_object[j].objecttype == FIGHTER) ||
 					(render_object[j].objecttype == RAIDER) ||
 					(render_object[j].objecttype == STARBASE) ||
 					(render_object[j].objecttype == ZYLONBASE))
@@ -685,7 +695,7 @@ void move_objects()
 			}
 			
 		}
-		if ((render_object[i].objecttype == TIE) ||
+		if ((render_object[i].objecttype == FIGHTER) ||
 			(render_object[i].objecttype == RAIDER) ||
 			(render_object[i].objecttype == STARBASE) ||
 			(render_object[i].objecttype == ZYLONBASE))
@@ -1030,7 +1040,7 @@ void maneuver()
 	{
 		if (render_object[i].active)
 		{
-			if ((render_object[i].objecttype == TIE) ||
+			if ((render_object[i].objecttype == FIGHTER) ||
 				(render_object[i].objecttype == RAIDER) ||
 				(render_object[i].objecttype == ZYLONBASE))
 			{
@@ -1305,13 +1315,20 @@ int main()
 	
 	Vector3 Rotation = (Vector3){0,0,0,0};
 	Vector3 Position = (Vector3){-20,-20,200,0};
-	Cube.name = "TIE";
-	Cube.vertexes = TieV;
-	Cube.num_of_vertexes = num_of_tie_vertexes;
-	Cube.faces = TieF;
-	Cube.num_of_faces = num_of_tie_faces;
-	Cube.Position = Position;
-	Cube.Rotation = Rotation;
+	TieFighter.name = "TIEFighter";
+	TieFighter.vertexes = TieV;
+	TieFighter.num_of_vertexes = num_of_tie_vertexes;
+	TieFighter.faces = TieF;
+	TieFighter.num_of_faces = num_of_tie_faces;
+	TieFighter.Position = Position;
+	TieFighter.Rotation = Rotation;
+	ZylonFighter.name = "ZylonFighter";
+	ZylonFighter.vertexes = ZylV;
+	ZylonFighter.num_of_vertexes = num_of_zyl_vertexes;
+	ZylonFighter.faces = ZylF;
+	ZylonFighter.num_of_faces = num_of_zyl_faces;
+	ZylonFighter.Position = Position;
+	ZylonFighter.Rotation = Rotation;
 	Vector3 RotationA = (Vector3){0.8,0.8,0.8,0};
 	Vector3 PositionA = (Vector3){-20,-20,200,0};
 	Asteroid.name = "ASTEROID";
@@ -1815,7 +1832,7 @@ void heartbeat()
 		{
 			if (render_object[i].active)
 			{
-				if ((render_object[i].objecttype == TIE) ||
+				if ((render_object[i].objecttype == FIGHTER) ||
 					(render_object[i].objecttype == RAIDER) ||
 					(render_object[i].objecttype == ZYLONBASE))
 					{
@@ -2121,15 +2138,6 @@ void init_game()
 			gmap[i][j].layerA = 0;
 }
 
-int rand_range(int max, int min)
-{
-	float range = 0;
-	while ((abs(range) < min) || (abs(range) > max))
-	{	
-		range = (int)(((((float)(rand()%100))/100)*(max-min)+min)*((rand()%3)-1));
-	}
-	return range;
-}
 
 void init_sector()
 {
@@ -2164,11 +2172,11 @@ void init_sector()
 					render_object[j].yr = 0;
 					render_object[j].zr = 0;
 					render_object[j].active = true;
-					render_object[j].mesh = Cube;
+					render_object[j].mesh = (rand()%2 == 0)?ZylonFighter:TieFighter;
 					render_object[j].mesh.Position.X = (float)rand_range(1600, 1500);
 					render_object[j].mesh.Position.Y = (float)rand_range(1600, 1500);
 					render_object[j].mesh.Position.Z = (float)rand_range(1600, 1500);
-					render_object[j].objecttype = TIE;
+					render_object[j].objecttype = FIGHTER;
 				} 
 			}
 			red_alert = true;
