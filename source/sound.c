@@ -125,6 +125,7 @@ void audio_init()
 			case PHOTONT_FIRE_E:
 				sounds[n].data = (s16 *)laserrocket_5984;
 				sounds[n].length = LASERROCKET_5984_LENGTH/2;
+				sounds[n].volume = 0.3;
 				break;
 			case PHOTONT_FIRE_L:
 				sounds[n].data = (s16 *)blaster_2_81267;
@@ -241,9 +242,9 @@ void checkSoundFX()
 void setSoundFX (enum sound_effects effect)
 {
 	sounds[effect].active = true;
-	sounds[effect].volume = 1.0;
+	//sounds[effect].volume = 1.0;
 	sounds[effect].offset = 0;
-	sounds[effect].balance = 0;
+	//sounds[effect].balance = 0;
 	sounds[effect].repeated = sounds[effect].repeat;
 }
 

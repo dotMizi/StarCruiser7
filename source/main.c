@@ -665,13 +665,16 @@ void move_objects()
 								if(abs(render_object[i].mesh.Position.X - render_object[j].mesh.Position.X) < 20)
 								{
 									hit(render_object[j].mesh.Position.X, render_object[j].mesh.Position.Y, render_object[j].mesh.Position.Z);
-									render_object[j].active = false; //enemy is gone
 									render_object[i].active = false; //photon torpedo is gone
-									if (render_object[j].objecttype != STARBASE)
+									if (render_object[j].active)
 									{
-										gmap[cruiser_sector_x][cruiser_sector_y].layerA--;
-										overall_enemies_destroyed++;
-									} else gmap[cruiser_sector_x][cruiser_sector_y].layerA = 0;
+										render_object[j].active = false; //enemy is gone
+										if (render_object[j].objecttype != STARBASE)
+										{
+											gmap[cruiser_sector_x][cruiser_sector_y].layerA--;
+											overall_enemies_destroyed++;
+										} else gmap[cruiser_sector_x][cruiser_sector_y].layerA = 0;
+									}
 									continue;
 								}
 					}
