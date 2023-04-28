@@ -62,12 +62,14 @@ time_t last_secs_min = 0;
 time_t rand_secs = 0;
 time_t secs = 0;
 
+int fps_counter = 0;
+int fps = 0;
+
 int ASlot;
 int counter;
 
 int velocity[10] = {0,1,2,3,4,6,12,25,37,43};
 float speed_costs[10]  = {0.0,1.0,1.5,2.0,2.5,3.0,3.5,7.5,11.25,15};
-float hyperwarp_costs[24] = {100.0,130.0,160.0,200.0,230.0,500.0,700.0,800.0,900.0,1200.0,1250.0,1300.0,1350.0,1400.0,1550.0,1700.0,1840.0,2000.0,2080.0,2160.0,2230.0,2320.0,2410.0,2500.0};
 float hyperwarp_energy;
 enum warp_states warp_state;
 enum docking_states docking_state;
@@ -76,14 +78,18 @@ int warp_sound = 0;
 star hyperwarp_location;
 star hyperwarp_direction;
 int hyperspace_ttr;
+float dx, dy;
 
 bool red_alert = false;
 
 int target_lock;
+bool display_diagnostic = false;
 
 floater asteroid;
 
 int game_level;
+
+char vc_text[21];
 
 int messages[MAX_MESSAGES];
 int message_index;
@@ -154,6 +160,8 @@ const char* rank_message[] =
 	"COMMANDER",			// 10
 	"STAR COMMANDER"		// 12
 };
+
+char debug_string[81];
 
 struct floater debris[MAX_NUM_DEBRIS];
 struct floater render_object[MAX_NUM_OF_ENEMIES];
@@ -490,6 +498,13 @@ int get_num_free_message_slots()
 void queue_message(int message)
 {
 	int i;
+	
+	if ((strlen(message_text[message]) < 20)&&(message != 0)&&(message != 43))
+	{
+		sprintf (vc_text, message_text[message]);
+		vc_print(vc_text);
+	}
+	
 	for (i = message_index; i < MAX_MESSAGES; i++)
 	{
 		if (messages[i] < 0) 
@@ -840,7 +855,7 @@ void hit(int x, int y, int z)
 	int i, n = 0;
 	for (i=0; i < sizeof debris / sizeof *debris; i++)
 	{
-		if (n <= 15)
+		if (n < DEBRIS_PARTICLES_PER_EXPLOSION)
 		{	
 			if (debris[i].ttl <= 0)
 				debris[i].active == false;
@@ -889,6 +904,7 @@ void move_asteroid()
 				}
 				if (VectorLength(render_object[ASlot].mesh.Position) < 50)
 				{
+					drain_energy(ASTEROID_HIT);
 					hit (render_object[ASlot].mesh.Position.X, render_object[ASlot].mesh.Position.Y, render_object[ASlot].mesh.Position.Z);
 					overall_damage_count += (60/((shield&&shield_avail())?2:1))*(game_level+1);
 					if (overall_damage_count > 100)
@@ -1368,6 +1384,7 @@ int main()
   // Main loop
   while (aptMainLoop()&&(gamestate!=GAME_EXIT))
   {
+	  fps_counter++;
 	circlePosition joy;
 	checkSoundFX();
 	
@@ -1382,6 +1399,7 @@ int main()
 	//Read the CirclePad position
 	hidCircleRead(&joy);
 	
+	if (energy != 0) sprintf (debug_string, "OK");
 	switch (gamestate) {
 		case GAME_RESUME:
 			char* ritems[2] = {"RESUME", "RESTART GAME"};
@@ -1581,7 +1599,8 @@ int main()
 					if (speed < 0) speed = 0;
 				}
 				if (hidKeysDown() & KEY_SELECT){
-					bottomscreen_state = DEBUG_SCREEN;
+					//bottomscreen_state = DEBUG_SCREEN;
+					display_diagnostic = !display_diagnostic;
 				}
 				if (hidKeysDown() & KEY_DRIGHT){
 					if(bottomscreen_state==COCKPIT) {
@@ -1659,6 +1678,12 @@ int main()
 						warp_speed = 100; // 16 = infinite
 						warp_state = IN_HYPERSPACE;
 						queue_message(12); //HYPERSPACE
+						/*
+						soll 200 - 200 dividiert durch 10 - gl (10 und 5)*5 50 bis 25
+						
+						(x - xt)/ttr      
+						y - yt 
+						*/
 						hyperwarp_target_sector_x += (int)((hyperwarp_location.x-WIDTH_TOP/2)/((10-game_level)*5));
 						hyperwarp_target_sector_y += (int)((hyperwarp_location.y-HEIGHT/2)/((10-game_level)*5));
 						if (hyperwarp_target_sector_x < 0) hyperwarp_target_sector_x = GMAP_MAX_X-1;
@@ -1672,6 +1697,9 @@ int main()
 								pow(abs(cruiser_sector_y - hyperwarp_target_sector_y), 2)
 								)
 							) / 18 *23);
+							
+						dx = ((float)(cruiser_sector_x - hyperwarp_target_sector_x))/((float)hyperspace_ttr);
+						dy = ((float)(cruiser_sector_y - hyperwarp_target_sector_y))/((float)hyperspace_ttr);
 					}
 			}
 			if (warp_state == ABORTED)
@@ -1828,6 +1856,9 @@ void heartbeat()
 		last_secs = secs;
 		counter++;
 		
+		fps = fps_counter;
+		fps_counter = 0;
+		
 		copygmap();
 		check_starbase_destroyed();
 		
@@ -1883,16 +1914,28 @@ void heartbeat()
 			// end of hyperspace
 			if (warp_state == IN_HYPERSPACE)
 			{
+				if (energy == 0) sprintf (debug_string, "HEARTBEAT1");
 				if (hyperspace_ttr-- >= 0)
 				{
 					setSoundFX(TIC);
 					drain_energy(HYPERSPACE);
+					cruiser_sector_x = hyperwarp_target_sector_x + (int)(dx*hyperspace_ttr);
+					cruiser_sector_y = hyperwarp_target_sector_y + (int)(dy*hyperspace_ttr);
+					if (cruiser_sector_x < 0) cruiser_sector_x = GMAP_MAX_X-1;
+					if (cruiser_sector_x >= GMAP_MAX_X) cruiser_sector_x = 0;
+					if (cruiser_sector_y < 0) cruiser_sector_y = GMAP_MAX_Y-1;
+					if (cruiser_sector_y >= GMAP_MAX_Y) cruiser_sector_y = 0;
 				} else {
 					queue_message(11); // HYPERSPACE COMPLETE
 					warp_state = ABORTED;
 					cruiser_sector_x = hyperwarp_target_sector_x;
 					cruiser_sector_y = hyperwarp_target_sector_y;
-					init_sector();
+					if (energy == 0) {
+						sprintf (debug_string, "HEARTBEAT2");
+					} else {
+						init_sector();
+						if (energy == 0) sprintf (debug_string, "HEARTBEAT3");
+					}
 				}
 			}
 		}
@@ -1989,10 +2032,14 @@ void drain_energy(enum energy_consume consume)
 			}
 			break;
 		case ASTEROID_HIT:
+			sprintf (vc_text, "HIT BY ASTEROID");
+			vc_print(vc_text);
 			energy -= 50.0; // energy consumed by asteroid hit
 			overall_energy += 50.0;
 			break;
 		case PHOTONT_HIT:
+			sprintf (vc_text, "HIT BY PHOTONTORPEDO");
+			vc_print(vc_text);
 			energy -= 100.0; // energy consumed by photon torpedo hit
 			overall_energy += 100;
 			break;
@@ -2000,33 +2047,10 @@ void drain_energy(enum energy_consume consume)
 			energy -= 10.0; // energy consumed by fiering photon torpedo
 			overall_energy += 10.0;
 			break;
-		case HYPERSPACE:
-			energy -= hyperwarp_costs[
-				(int)((
-					sqrt(
-						pow(abs(cruiser_sector_x-hyperwarp_target_sector_x), 2)+
-						pow(abs(cruiser_sector_y-hyperwarp_target_sector_y), 2)
-					)
-				) / 18 *23)
-			] / ((
-					sqrt(
-						pow(abs(cruiser_sector_x-hyperwarp_target_sector_x), 2)+
-						pow(abs(cruiser_sector_y-hyperwarp_target_sector_y), 2)
-					)
-				) / 18 *23);
-			overall_energy += hyperwarp_costs[
-				(int)((
-					sqrt(
-						pow(abs(cruiser_sector_x-hyperwarp_target_sector_x), 2)+
-						pow(abs(cruiser_sector_y-hyperwarp_target_sector_y), 2)
-					)
-				) / 18 *23)
-			] / ((
-					sqrt(
-						pow(abs(cruiser_sector_x-hyperwarp_target_sector_x), 2)+
-						pow(abs(cruiser_sector_y-hyperwarp_target_sector_y), 2)
-					)
-				) / 18 *23);
+		case HYPERSPACE:	
+			energy -= HYPERWARP_COSTS;
+			overall_energy += HYPERWARP_COSTS;
+			
 		default:
 			break;
 	}
@@ -2076,6 +2100,8 @@ void repair()
 	
 	maxspeed = 9;
 	overall_damage_count = overall_damage_count /2;
+	sprintf (vc_text, "OVERALL DAMAGE %d", overall_damage_count);
+	vc_print(vc_text);
 	toggle_energy_color = false;
 	energy = 9999.0;
 }
@@ -2111,6 +2137,8 @@ void init_game()
 	maxspeed = 9;
 	speed = 6;
 	
+	display_diagnostic = false;
+	
 	focal_distance = FOCAL_DISTANCE;
 	
 	gamestate = GAME_SPLASH;
@@ -2128,6 +2156,8 @@ void init_game()
 	gettimeofday(&t_game, NULL);
 	gettimeofday(&t_last, NULL);
 	gettimeofday(&t_act, NULL);
+	
+	vc_init();
 	
 	for (i=0; i < NUM_STARS; i++)
 		create_new_star(i);
@@ -2158,6 +2188,8 @@ void init_sector()
 		case 2: 
 		case 3: 
 		case 4: //fill with enemies
+			sprintf (vc_text, "%d ENEMIES IN SECTOR", gmap[cruiser_sector_x][cruiser_sector_y].layerA);
+			vc_print(vc_text);
 			for (i=0; i<gmap[cruiser_sector_x][cruiser_sector_y].layerA; i++)
 			{
 				j = get_enemie_slot();
@@ -2185,6 +2217,8 @@ void init_sector()
 			red_alert = true;
 			break;
 		case 5: //set up starbase
+			sprintf (vc_text, "STARBASE SECTOR");
+			vc_print(vc_text);
 			j = get_enemie_slot();
 			if (j >= 0)
 			{

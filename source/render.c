@@ -158,7 +158,7 @@ void draw_bottom_screen()
 					fbAdr[((x*HEIGHT)+y)*3+1] = color_g[C_COCKPIT_BLUE];
 					fbAdr[((x*HEIGHT)+y)*3+2] = color_r[C_COCKPIT_BLUE];
 				}
-			sprintf(text, "MISSION TIME: %02d.%02d", game_time/60, game_time%60);
+			sprintf(text, "MISSION TIME: %02d:%02d", game_time/60, game_time%60);
 			draw_text_XXL (text, fbAdr, 10, 30, C_WHITE, WIDTH_BOTTOM);
 			
 			if ((target_marker >= 0)&&((computer)&&(computer_avail()))) 
@@ -263,16 +263,15 @@ void draw_bottom_screen()
 					draw_block(fbAdr, 9+hyperwarp_target_sector_x*19, 25+20+hyperwarp_target_sector_y*19, 17, 17, C_STARBASE_ORANGE_SHIELD, WIDTH_BOTTOM);
 			}
 			draw_block(fbAdr, 9+cruiser_sector_x*19, 25+20+cruiser_sector_y*19, 17, 17, C_STARBASE_ORANGE_SHIELD, WIDTH_BOTTOM);
-			hyperwarp_energy = hyperwarp_costs[
+			hyperwarp_energy = (hyperwarp_target_sector_x < 0)?0:HYPERWARP_COSTS * 
 				(int)((
 					sqrt(
 						pow(abs(cruiser_sector_x-hyperwarp_target_sector_x), 2)+
 						pow(abs(cruiser_sector_y-hyperwarp_target_sector_y), 2)
 					)
-				) / 18 *23)
-			];
+				) / 18 *23);
 						
-			sprintf(text, "MISSION TIME: %02d.%02d", game_time/60, game_time%60);
+			sprintf(text, "MISSION TIME: %02d:%02d", game_time/60, game_time%60);
 			draw_text (text, fbAdr, 10, 6, C_WHITE, WIDTH_BOTTOM);
 			sprintf(text, "TARGETS: %d", gmap[hyperwarp_target_sector_x][hyperwarp_target_sector_y].layerB<5?gmap[hyperwarp_target_sector_x][hyperwarp_target_sector_y].layerB:0);
 			draw_text (text, fbAdr, WIDTH_BOTTOM/2+50, 6, C_YELLOW, WIDTH_BOTTOM);
@@ -475,6 +474,42 @@ void draw_top_screen()
 		} else {
 			draw_computer(fbAdr_L, fbAdr_R, false, false, 0, 0);
 		}
+	}
+
+	if (display_diagnostic)
+	{
+		int offset = 30;
+		char diagnostic[81];
+		sprintf (diagnostic, "FPS: %d", fps);
+		draw_text (diagnostic, fbAdr_L, (WIDTH_TOP-strlen(diagnostic)*8-8-get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		draw_text (diagnostic, fbAdr_R, (WIDTH_TOP-strlen(diagnostic)*8-8+get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		offset += 10;
+		sprintf (diagnostic, "OVERALL DAMAGE: %d%%", overall_damage_count);
+		draw_text (diagnostic, fbAdr_L, (WIDTH_TOP-strlen(diagnostic)*8-8-get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		draw_text (diagnostic, fbAdr_R, (WIDTH_TOP-strlen(diagnostic)*8-8+get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		offset += 10;
+		sprintf (diagnostic, "RANK: %d", get_rank_absolute());
+		draw_text (diagnostic, fbAdr_L, (WIDTH_TOP-strlen(diagnostic)*8-8-get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		draw_text (diagnostic, fbAdr_R, (WIDTH_TOP-strlen(diagnostic)*8-8+get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		offset += 10;
+		sprintf (diagnostic, "ENEMIES LEFT: %d", get_num_of_enemies());
+		draw_text (diagnostic, fbAdr_L, (WIDTH_TOP-strlen(diagnostic)*8-8-get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		draw_text (diagnostic, fbAdr_R, (WIDTH_TOP-strlen(diagnostic)*8-8+get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		offset += 10;
+		(hyperwarp_target_sector_x < 0)?sprintf (diagnostic, "HW TARGET X: N/A"):sprintf (diagnostic, "HW TARGET X: %d", hyperwarp_target_sector_x);
+		draw_text (diagnostic, fbAdr_L, (WIDTH_TOP-strlen(diagnostic)*8-8-get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		draw_text (diagnostic, fbAdr_R, (WIDTH_TOP-strlen(diagnostic)*8-8+get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		offset += 10;
+		(hyperwarp_target_sector_y < 0)?sprintf (diagnostic, "HW TARGET Y: N/A"):sprintf (diagnostic, "HW TARGET Y: %d", hyperwarp_target_sector_y);
+		draw_text (diagnostic, fbAdr_L, (WIDTH_TOP-strlen(diagnostic)*8-8-get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		draw_text (diagnostic, fbAdr_R, (WIDTH_TOP-strlen(diagnostic)*8-8+get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		offset += 10;
+		//sprintf (diagnostic, "DEBUG: %s", debug_string);
+		//draw_text (diagnostic, fbAdr_L, (WIDTH_TOP-strlen(diagnostic)*8-8-get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		//draw_text (diagnostic, fbAdr_R, (WIDTH_TOP-strlen(diagnostic)*8-8+get_stereo_separation(300)/2), HEIGHT - offset, C_WHITE, WIDTH_TOP);
+		
+		vc_draw(fbAdr_L, 10-get_stereo_separation(300)/2, HEIGHT-30, C_WHITE, WIDTH_TOP);
+		vc_draw(fbAdr_R, 10+get_stereo_separation(300)/2, HEIGHT-30, C_WHITE, WIDTH_TOP);
 	}
 }
 
@@ -1152,6 +1187,11 @@ void draw_text_SL (char* text, u8* fbAdr, int posX, int posY, int color, int max
 
 void draw_text (char* text, u8* fbAdr, int posX, int posY, int color, int max_width)
 {
+	draw_text_part (text, fbAdr, posX, posY, color, max_width, 0, 7);
+}
+
+void draw_text_part (char* text, u8* fbAdr, int posX, int posY, int color, int max_width, int start, int end)
+{
 	int i;
 	int x, y;
 	
@@ -1164,7 +1204,7 @@ void draw_text (char* text, u8* fbAdr, int posX, int posY, int color, int max_wi
 		{
 			int idx = (int)text[i] - 32;
 			int j, k;
-			for (j=0; j<8; j++)
+			for (j=7-end; j<=(7-start); j++)
 				for (k=0; k<8; k++)
 				{
 					u8 pixel = character[idx][7-j][k];
@@ -1210,3 +1250,42 @@ void draw_text_XXL (char* text, u8* fbAdr, int posX, int posY, int color, int ma
 	}
 }
 
+#define VCONSOLE_WIDTH 21
+#define VCONSOLE_HEIGHT 9
+char vconsole_buffer[VCONSOLE_HEIGHT][VCONSOLE_WIDTH];
+
+void vc_init()
+{
+	int i,j;
+	for (i=0;i<VCONSOLE_WIDTH-1;i++)
+		for (j=0;j<VCONSOLE_HEIGHT;j++)
+			vconsole_buffer[j][i] = ' ';
+	for (j=0;j<VCONSOLE_HEIGHT;j++) vconsole_buffer[j][VCONSOLE_WIDTH-1] = 0;		
+}
+
+void vc_print (char *text)
+{
+	int i,j;
+	for (i=1;i<VCONSOLE_HEIGHT;i++)
+		for (j=0;j<VCONSOLE_WIDTH;j++)
+			vconsole_buffer[i-1][j] = vconsole_buffer[i][j];
+		
+	for (j=0;j<VCONSOLE_WIDTH-1;j++)
+		if (j < strlen(text))
+		{
+			vconsole_buffer[VCONSOLE_HEIGHT-1][j] = text[j];
+		} else vconsole_buffer[VCONSOLE_HEIGHT-1][j] = ' ';
+}
+
+void vc_draw(u8* fbAdr, int posX, int posY, int color, int max_width)
+{
+	int i,j,k;
+	
+	k=0; 
+	
+	for (i=0;i<VCONSOLE_HEIGHT;i++)
+	{
+		draw_text (&(vconsole_buffer[i][0]), fbAdr, posX, posY-k, color, max_width);
+		k += 10;
+	}
+}

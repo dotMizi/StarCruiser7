@@ -7,6 +7,9 @@
 
 #define MAX_NUM_OF_ENEMIES 20
 #define MAX_NUM_DEBRIS 40
+#define DEBRIS_PARTICLES_PER_EXPLOSION 15
+
+#define HYPERWARP_COSTS 130
 
 #define FIRE_RANGE	1000
 #define MAX_MESSAGES 15
@@ -98,7 +101,6 @@ extern int class;
 extern int counter;
 extern float hyperwarp_energy;
 extern bool toggle_energy_color;
-extern float hyperwarp_costs[];
 extern int velocity[];
 extern int speed;
 extern float warp_speed;
@@ -121,13 +123,14 @@ extern const char* message_text[];
 extern int message_index;
 extern int messages[];
 
+extern bool display_diagnostic;
+extern int fps;
+
 extern const char* rank_message[];
 
 extern void hit(int x, int y, int z);
 extern int get_enemie_slot();
 extern bool game_over_display_on();
-
-extern get_num_of_enemies();
 
 extern int starbase_surrounded();
 extern bool is_starbase_surrounded(int x, int y);
@@ -141,3 +144,6 @@ extern int starbase_destruction_timer;
 extern bool target_timer_running;
 extern int countdown();
 extern int get_rank_m();
+extern int get_rank_absolute();
+
+extern char debug_string[];

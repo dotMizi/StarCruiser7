@@ -19,4 +19,7 @@
 extern int focal_distance;
 extern int menu_item_selected;
 extern bool shield_active;
+
+extern void vc_init();
+extern void vc_print (char *text);
 #endif
