@@ -41,8 +41,6 @@ Start button - The Start button activates a selected menu item or activates the 
 
 Touch screen - Tapping on the cockpit view activates or deactivates the attack computer. Tapping the Galactic Map selects a sector for the hyperwarp. 
 
-The shoulder buttons are currently not used.
-
 ## Trivia
 Star Cruiser 7 is the name of the spaceship that the player operates in Star Raiders.
 
