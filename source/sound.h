@@ -14,13 +14,13 @@ extern void setSoundFXPrefs (enum sound_effects effect, float volume, int balanc
 extern void stopSoundFX (enum sound_effects effect);
 extern float getSoundVol(enum sound_effects effect);
 
-extern unsigned char congratulations_Amy[];
+extern const unsigned char congratulations_Amy[];
 #define CONGRATULATIONS_AMY_TERMINATION 0x00000000
 #define CONGRATULATIONS_AMY_START       0x00000000
 #define CONGRATULATIONS_AMY_FINISH      0x0001AE5A
 #define CONGRATULATIONS_AMY_LENGTH      0x0001AE5A
 
-extern game_over_Amy[];
+extern const unsigned char game_over_Amy[];
 #define GAME_OVER_AMY_TERMINATION 0x00000000
 #define GAME_OVER_AMY_START       0x00000000
 #define GAME_OVER_AMY_FINISH      0x00015700

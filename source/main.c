@@ -161,6 +161,18 @@ const char* rank_message[] =
 	"STAR COMMANDER"		// 12
 };
 
+// Konstante für festen Zeitschritt (60 Simulationen pro Sekunde)
+const double FIXED_DELTA_TIME = 1.0 / 60.0;
+
+// Funktionen zur Zeitmessung
+double get_current_time()
+{
+    struct timeval ttv;
+    gettimeofday(&ttv, NULL);
+
+    return ttv.tv_sec + ttv.tv_usec * 1e-6;
+}
+
 char debug_string[81];
 
 struct floater debris[MAX_NUM_DEBRIS];
@@ -431,6 +443,16 @@ bool target_starbase_valid = false;
 bool target_timer_running = false;
 int starbase_destruction_timer;
 
+int num_of_starbases()
+{
+    int x,y,r;
+    r = 0;
+    for (x=1; x<15; x++)
+        for(y=1; y<7; y++)
+            if(gmap[x][y].layerA == 5) r++;
+    return r;
+}
+
 bool set_target_starbase()
 {
 	if (num_of_starbases() > 0)
@@ -458,16 +480,6 @@ bool set_target_starbase()
 		target_starbase_valid = true;
 	} else target_starbase_valid = false;
 	return target_starbase_valid;	
-}
-
-int num_of_starbases()
-{
-	int x,y,r;
-	r = 0;
-	for (x=1; x<15; x++)
-		for(y=1; y<7; y++)
-			if(gmap[x][y].layerA == 5) r++;
-	return r;
 }
 
 void copygmap()
@@ -521,6 +533,23 @@ void queue_message(int message)
 			return;
 		}
 	}
+}
+
+//handle game over delay
+time_t last_secs_gd = 0;
+bool gd_sound = false;
+void set_game_over_display_delay()
+{
+    gettimeofday(&t_act, NULL);
+    last_secs_gd = t_act.tv_sec;
+    gd_sound = true;
+}
+
+bool game_over_display_on()
+{
+    gettimeofday(&t_act, NULL);
+    if ((last_secs_gd + 5) <= t_act.tv_sec) return true;
+    return false;
 }
 
 void damage(int damagelevel)
@@ -628,6 +657,167 @@ Vector3 face_to(Vector3 act_view, Vector3 dir)
 	float theta = atan2(dir.X, dir.Z); //-180 - +180
 	
 	return (Vector3) {phi,theta, 0.0,0};
+}
+
+void drain_energy(enum energy_consume consume)
+{
+    switch(consume) {
+        case SECONDLY:
+            energy -= 0.25; // energy consumed by life support system
+            overall_energy += 0.25;
+            energy -= speed_costs[speed]; // energy consumed for twin-ion speed
+            overall_energy += speed_costs[speed];
+            if (shield && shield_avail())
+            {
+                energy -= 2.0; // energy consumed by shields
+                overall_energy += 2.0;
+            }
+            if (computer && computer_avail())
+            {
+                energy -= 0.5; // energy consumed by computer
+                overall_energy += 0.5;
+            }
+            break;
+        case ASTEROID_HIT:
+            sprintf (vc_text, "HIT BY ASTEROID");
+            vc_print(vc_text);
+            energy -= 50.0; // energy consumed by asteroid hit
+            overall_energy += 50.0;
+            break;
+        case PHOTONT_HIT:
+            sprintf (vc_text, "HIT BY PHOTONTORPEDO");
+            vc_print(vc_text);
+            energy -= 100.0; // energy consumed by photon torpedo hit
+            overall_energy += 100;
+            break;
+        case PHOTONT_FIRE:
+            energy -= 10.0; // energy consumed by fiering photon torpedo
+            overall_energy += 10.0;
+            break;
+        case HYPERSPACE:
+            energy -= HYPERWARP_COSTS;
+            overall_energy += HYPERWARP_COSTS;
+            
+        default:
+            break;
+    }
+    
+    if (energy<0) energy = 0;
+    if (energy <= 0)
+    {
+        set_shield_state(DESTROYED);
+        set_computer_state(DESTROYED);
+        photon_left_avail = false;
+        photon_right_avail = false;
+        maxspeed--;
+    }
+    if (maxspeed < 0) maxspeed = 0;
+    
+    if (energy < 1000.0)
+    {
+        toggle_energy_color = !toggle_energy_color;
+    } else {
+        toggle_energy_color = false;
+    }
+}
+
+void create_new_enemy_photont(Vector3 source)
+{
+    Vector3 dest;
+    int i;
+    i = get_enemie_slot();
+    if (i>=0)
+    {
+        render_object[i].active = true;
+        render_object[i].objecttype = ENEMYPHOTONT;
+        render_object[i].mesh = PhotonT;
+        render_object[i].mesh.Position.X = source.X;
+        render_object[i].mesh.Position.Y = source.Y;
+        render_object[i].mesh.Position.Z = source.Z;
+        render_object[i].xr = 0.02;
+        render_object[i].yr = 0.02;
+        render_object[i].zr = 0.02;
+        render_object[i].xt = 0.0;
+        render_object[i].yt = 0.0;
+        render_object[i].zt = 0.0;
+        dest = VectorScalar(VectorNormal(source), 10);
+        render_object[i].move.x = dest.X;
+        render_object[i].move.y = dest.Y-0.5;
+        render_object[i].move.z = dest.Z;
+        setSoundFX (PHOTONT_FIRE_E);
+    }
+}
+
+void create_new_friendly_photont()
+{
+    int i;
+    i = get_enemie_slot();
+    if (i>=0)
+    {
+        if (((photon_left_ready)&&(photon_left_avail))||((!photon_left_ready)&&(photon_right_avail)))
+        {
+            render_object[i].active = true;
+            render_object[i].objecttype = PHOTONT;
+            render_object[i].mesh = PhotonT;
+            render_object[i].mesh.Position.X = (photon_left_ready)?-10:10;
+            render_object[i].mesh.Position.Y = -30;
+            render_object[i].mesh.Position.Z = 100*(front_view?1:(-1));
+            render_object[i].xr = 0.02;
+            render_object[i].yr = 0.02;
+            render_object[i].zr = 0.02;
+            render_object[i].xt = 0.0;
+            render_object[i].yt = 0.0;
+            render_object[i].zt = 0.0;
+    
+            render_object[i].move.x = 0.0;
+            render_object[i].move.y = -0.5;
+            render_object[i].move.z = (velocity[speed] + 10);
+            if (front_view) render_object[i].move.z = (velocity[speed] + 10)*(-1);
+            drain_energy(PHOTONT_FIRE);
+            setSoundFX (photon_left_ready?PHOTONT_FIRE_L:PHOTONT_FIRE_R);
+        }
+        photon_left_ready = !photon_left_ready;
+    }
+}
+
+void create_new_asteroid()
+{
+    int i;
+    i = get_enemie_slot();
+    if (i>=0)
+    {
+        render_object[i].active = true;
+        render_object[i].objecttype = ASTEROID;
+        render_object[i].mesh = Asteroid;
+        render_object[i].mesh.Position.X = (float)rand_range((MAX_DIST/16)*(10-speed), 100);
+        render_object[i].mesh.Position.Y = (float)rand_range((MAX_DIST/16)*(10-speed), 100);
+        render_object[i].mesh.Position.Z = MAX_DIST;
+        render_object[i].xr = (((float)(rand() % 20))-10)/1000;
+        render_object[i].yr = (((float)(rand() % 20))-10)/1000;
+        render_object[i].zr = (((float)(rand() % 20))-10)/1000;
+        render_object[i].xt = ((float)(rand() % 30) - 15);
+        render_object[i].yt = ((float)(rand() % 30) - 15);
+        render_object[i].zt = (((float)MAX_DIST*speed) / 10.0)/VectorLength((Vector3){0.0,0.0,(float)MAX_DIST,0.0})*VectorLength(render_object[i].mesh.Position);
+        Vector3 Move = VectorNormal(VectorSub(render_object[i].mesh.Position, (Vector3){render_object[i].xt,render_object[i].yt,render_object[i].zt,0.0}));
+
+        int length = VectorLength(VectorSub(render_object[i].mesh.Position, (Vector3){render_object[i].xt,render_object[i].yt,render_object[i].zt,0.0}));
+    
+        render_object[i].move.x = Move.X; render_object[i].mesh.Position.X / length;
+        render_object[i].move.y = Move.Y; render_object[i].mesh.Position.Y / length;
+        render_object[i].move.z = Move.Z; render_object[i].mesh.Position.Z / length;
+    }
+}
+
+void move_star(int i);
+
+void create_new_star(int i)
+{
+    stars[i].x = (float)(rand()%MAX_DIST*2-MAX_DIST);
+    stars[i].y = (float)(rand()%MAX_DIST*2-MAX_DIST);
+    stars[i].z = (float)(rand()%MAX_DIST*2-MAX_DIST);
+
+    trail_stars[i] = stars[i];
+    move_star(i);
 }
 
 void move_objects()
@@ -745,6 +935,655 @@ void move_star(int i)
 		default:
 			break;
 	}
+}
+
+int max_speed()
+{
+    if (energy <= 0) return maxspeed;
+    if (!engines_avail()) return rand()%3+1;
+    return 9;
+}
+
+// enemy ai
+
+int maneuver_loop = 0;
+void maneuver()
+{
+    int i;
+    float r = 1000.0;
+    
+        
+    for (i=0; i < MAX_NUM_OF_ENEMIES; i++)
+    {
+        if (render_object[i].active)
+        {
+            if ((render_object[i].objecttype == FIGHTER) ||
+                (render_object[i].objecttype == RAIDER) ||
+                (render_object[i].objecttype == ZYLONBASE))
+            {
+                Vector3 dir = (Vector3){render_object[i].mesh.Position.X, render_object[i].mesh.Position.Y, render_object[i].mesh.Position.Z-500, 0.0};
+                if (VectorLength(render_object[i].mesh.Position) < r)
+                {
+                    dir = VectorScalar(VectorNormal((Vector3){rand()%20-10,rand()%20-10,rand()%20-10, 0.0}), rand()%3);
+                    dir = VectorAdd(dir, (Vector3){0.0,0.0,(float)velocity[speed]*(-1.0),0.0});
+                } else {
+                    dir = VectorScalar(VectorNormal(dir), velocity[7]);
+                }
+                
+                render_object[i].move.x = (render_object[i].move.x + dir.X)/2;
+                render_object[i].move.y = (render_object[i].move.y + dir.Y)/2;
+                render_object[i].move.z = (render_object[i].move.z + dir.Z)/2;
+            }
+        }
+    }
+}
+
+int get_initial_num_starbases(int level)
+{
+    return 3+level;
+}
+
+int get_initial_num_enemies(int level)
+{
+    // has to be dividable by 9!
+    return (3+level)*9; //27, 36, 45, 54
+}
+
+int get_num_of_enemies()
+{
+    int i,j,r = 0;
+    for (i=0; i< GMAP_MAX_X; i++)
+        for(j=0; j< GMAP_MAX_Y; j++)
+            if ((gmap[i][j].layerA > 0) && (gmap[i][j].layerA < 5)) r+=gmap[i][j].layerA;
+    return r;
+}
+
+int get_num_of_starbases()
+{
+    int i,j,r = 0;
+    for (i=0; i< GMAP_MAX_X; i++)
+        for(j=0; j< GMAP_MAX_Y; j++)
+            if (gmap[i][j].layerA == 5) r++;
+    return r;
+}
+
+void init_game()
+{
+    int i,j;
+    front_view = true;
+    computer = false;
+    set_computer_state(WORKING);
+    shield = false;
+    set_shield_state(WORKING);
+    photon_right_avail = true;
+    photon_left_avail = true;
+    set_engines_state(WORKING);
+    set_subspace_radio_state(WORKING);
+    set_sector_scan_state(WORKING);
+    toggle_energy_color = false;
+    menu_item_selected = 0;
+    message_index = 0;
+    starbase_destruction_timer = 999999;
+    ASlot = 0;
+    last_secs = 0;
+    last_secs2 = 0;
+    last_secs9 = 0;
+    last_secs_min = 0;
+    rand_secs = 0;
+    energy = 9999.0; // to prevent messages
+    target_lock = -1;
+    
+    red_alert = false;
+    
+    maxspeed = 9;
+    speed = 6;
+    
+    display_diagnostic = false;
+    
+    focal_distance = FOCAL_DISTANCE;
+    
+    gamestate = GAME_SPLASH;
+    bottomscreen_state = NO_SCREEN;
+    warp_state = NOT_ENGAGED;
+    warp_sound = 0;
+    
+    for (i = 0; i < MAX_MESSAGES; i++)
+        messages[i] = -1;
+    sprintf (message1, "\0");
+    sprintf (message2, "\0");
+    queue_message(0);
+    
+    gettimeofday(&t_start, NULL);
+    gettimeofday(&t_game, NULL);
+    gettimeofday(&t_last, NULL);
+    gettimeofday(&t_act, NULL);
+    
+    vc_init();
+    
+    for (i=0; i < NUM_STARS; i++)
+        create_new_star(i);
+    for (i=0; i < sizeof debris / sizeof *debris; i++)
+    {
+        debris[i].active = false;
+        debris[i].ttl = 0;
+    }
+    for (i=0;i < 16;i++)
+        for (j=0; j < 8; j++)
+            gmap[i][j].layerA = 0;
+}
+
+void init_sector()
+{
+    int i, j;
+    docking_state = NONE;
+    target_lock = -1;
+    
+    for (i=0; i<MAX_NUM_OF_ENEMIES; i++) //clear all enemy slots
+    {
+        render_object[i].active = false;
+    }
+    
+    switch (gmap[cruiser_sector_x][cruiser_sector_y].layerA) {
+        case 1:
+        case 2:
+        case 3:
+        case 4: //fill with enemies
+            sprintf (vc_text, "%d ENEMIES IN SECTOR", gmap[cruiser_sector_x][cruiser_sector_y].layerA);
+            vc_print(vc_text);
+            for (i=0; i<gmap[cruiser_sector_x][cruiser_sector_y].layerA; i++)
+            {
+                j = get_enemie_slot();
+                if (j >= 0)
+                {
+                    Vector3 dir = VectorNormal((Vector3){1.0,1.0,1.0, 1.0});
+                    dir = VectorScalar(dir, 12);
+                    render_object[j].move.x = dir.X;
+                    render_object[j].move.y = dir.Y;
+                    render_object[j].move.z = dir.Z;
+                    render_object[j].dir.x = game_level;
+                    render_object[j].dir.y = 0;
+                    render_object[j].dir.z = 600;
+                    render_object[j].xr = 0;
+                    render_object[j].yr = 0;
+                    render_object[j].zr = 0;
+                    render_object[j].active = true;
+                    render_object[j].mesh = (rand()%2 == 0)?ZylonFighter:TieFighter;
+                    render_object[j].mesh.Position.X = (float)rand_range(1600, 1500);
+                    render_object[j].mesh.Position.Y = (float)rand_range(1600, 1500);
+                    render_object[j].mesh.Position.Z = (float)rand_range(1600, 1500);
+                    render_object[j].objecttype = FIGHTER;
+                }
+            }
+            red_alert = true;
+            break;
+        case 5: //set up starbase
+            sprintf (vc_text, "STARBASE SECTOR");
+            vc_print(vc_text);
+            j = get_enemie_slot();
+            if (j >= 0)
+            {
+                Vector3 dir = VectorNormal((Vector3){0.0,0.0,0.0, 1.0});
+                dir = VectorScalar(dir, 0); //dont move
+                render_object[j].move.x = dir.X;
+                render_object[j].move.y = dir.Y;
+                render_object[j].move.z = dir.Z;
+                render_object[j].active = true;
+                render_object[j].mesh = Starbase;
+                render_object[j].mesh.Position.X = (float)rand_range(1600, 1500);
+                render_object[j].mesh.Position.Y = (float)rand_range(1600, 1500);
+                render_object[j].mesh.Position.Z = (float)rand_range(1600, 1500);
+                render_object[j].objecttype = STARBASE;
+                render_object[j].xr = 0;
+                render_object[j].yr = 0.174533/5; //rotate slightly
+                render_object[j].zr = 0;
+            }
+            
+            break;
+        default:
+            break;
+    }
+    hyperwarp_target_sector_x = -1;
+    hyperwarp_target_sector_y = -1;
+    maneuver(); //set up enemy directions
+    create_new_asteroid(); //set up first asteroid
+}
+
+void check_starbase_destroyed()
+{
+    if (starbase_surrounded() > 0)
+    {
+        target_starbase_x = starbase_surrounded()/GMAP_MAX_X;
+        target_starbase_y = starbase_surrounded()%GMAP_MAX_X;
+        if ((target_starbase_x > 0) && (target_starbase_x < GMAP_MAX_X) && (target_starbase_y > 0) && (target_starbase_y < GMAP_MAX_Y))
+        {
+            target_starbase_valid = true;
+            if (!target_timer_running)
+            {
+                starbase_destruction_timer = secs + 60;
+                target_timer_running = true;
+            }
+        }
+    } else {
+        target_timer_running = false;
+    }
+    
+    if (target_starbase_valid)
+    {
+        if (is_starbase_surrounded(target_starbase_x, target_starbase_y)&&(countdown() < 0)) //if (starbase_surrounded()&&(starbase_destruction_timer < sec))
+        {
+            if (subspace_radio_avail())
+            {
+                queue_message(9);
+                queue_message(0);
+                queue_message(9);
+                queue_message(0);
+                queue_message(9);
+                setSoundFX(MESSAGE);
+            }
+            gmap[target_starbase_x][target_starbase_y].layerA = 2;
+            gmap[target_starbase_x][target_starbase_y].ttm = secs + rand()%(60-game_level*5);
+            if ((target_starbase_x == cruiser_sector_x)&&(target_starbase_y == cruiser_sector_y))
+            {
+                int x, y, z;
+                int s = get_active_slot(STARBASE);
+                if (s >=0)
+                {
+                    x = (int)(render_object[s].mesh.Position.X);
+                    y = (int)(render_object[s].mesh.Position.Y);
+                    z = (int)(render_object[s].mesh.Position.Z);
+                }
+                init_sector();
+                if (s >=0) hit(x,y,z);
+                stopSoundFX(DOCKING);
+                docking_state = BROKEN;
+            }
+            overall_starbases_destroyed++;
+            target_timer_running = false;
+            target_starbase_valid = false;
+        }
+    } else     set_target_starbase();
+}
+
+
+void heartbeat()
+{
+    int msec = 0;
+    int i, j;
+    
+    gettimeofday(&t_act, NULL);
+    secs = t_act.tv_sec - t_game.tv_sec;
+
+    if ((last_secs + 1) <= secs)
+    {
+        // call secondly tasks
+        blink_on = !blink_on;
+        last_secs = secs;
+        counter++;
+        
+        fps = fps_counter;
+        fps_counter = 0;
+        
+        copygmap();
+        check_starbase_destroyed();
+        
+        for (i=0; i < MAX_NUM_OF_ENEMIES; i++)
+        {
+            if (render_object[i].active)
+            {
+                if ((render_object[i].objecttype == FIGHTER) ||
+                    (render_object[i].objecttype == RAIDER) ||
+                    (render_object[i].objecttype == ZYLONBASE))
+                    {
+                        if(VectorLength(render_object[i].mesh.Position) < FIRE_RANGE)
+                        {
+                            int photon_rand = rand()%(300);
+                            
+                            if (photon_rand<(10*game_level+50))  // gl0:50 gl1:60 gl2:70 gl3:80
+                            {
+                                create_new_enemy_photont(render_object[i].mesh.Position);
+                            }
+                        }
+                    }
+            }
+        }
+        
+        // handle messages
+        
+        if (messages[message_index] < sizeof(message_text)/sizeof(message_text[0]))
+        {
+            if (messages[message_index] >= 0)
+            {
+                sprintf(act_message, message_text[messages[message_index]]);
+                messages[message_index] = -1;
+                message_index++;
+                if (message_index >= MAX_MESSAGES) message_index = 0;
+            } else act_message[0] = '\0';
+        } else     if (messages[message_index] == sizeof(message_text)/sizeof(message_text[0]))
+            {
+                sprintf(act_message,"%s", message1);
+                messages[message_index] = -1;
+                message_index++;
+                if (message_index >= MAX_MESSAGES) message_index = 0;
+            } else    if (messages[message_index] == sizeof(message_text)/sizeof(message_text[0]) + 1)
+                    {
+                        sprintf(act_message, "%s", message2);
+                        messages[message_index] = -1;
+                        message_index++;
+                        if (message_index >= MAX_MESSAGES) message_index = 0;
+                    } else act_message[0] = '\0';
+
+        if (gamestate == GAME_RUNNING)
+        {
+            drain_energy(SECONDLY);
+            // end of hyperspace
+            if (warp_state == IN_HYPERSPACE)
+            {
+                if (energy == 0) sprintf (debug_string, "HEARTBEAT1");
+                if (hyperspace_ttr-- >= 0)
+                {
+                    setSoundFX(TIC);
+                    drain_energy(HYPERSPACE);
+                    cruiser_sector_x = hyperwarp_target_sector_x + (int)(dx*hyperspace_ttr);
+                    cruiser_sector_y = hyperwarp_target_sector_y + (int)(dy*hyperspace_ttr);
+                    if (cruiser_sector_x < 0) cruiser_sector_x = GMAP_MAX_X-1;
+                    if (cruiser_sector_x >= GMAP_MAX_X) cruiser_sector_x = 0;
+                    if (cruiser_sector_y < 0) cruiser_sector_y = GMAP_MAX_Y-1;
+                    if (cruiser_sector_y >= GMAP_MAX_Y) cruiser_sector_y = 0;
+                } else {
+                    queue_message(11); // HYPERSPACE COMPLETE
+                    warp_state = ABORTED;
+                    cruiser_sector_x = hyperwarp_target_sector_x;
+                    cruiser_sector_y = hyperwarp_target_sector_y;
+                    if (energy == 0) {
+                        sprintf (debug_string, "HEARTBEAT2");
+                    } else {
+                        init_sector();
+                        if (energy == 0) sprintf (debug_string, "HEARTBEAT3");
+                    }
+                }
+            }
+        }
+    }
+    
+    if ((last_secs2 + 3) <= secs)
+    {
+        // call 3-secondly tasks
+        blink_3s_on = !blink_3s_on;
+        
+        if (gamestate == GAME_END)
+        {
+            switch (aborted)
+            {
+            case MISSION_COMPLETED:
+                if (get_num_free_message_slots() > 3)
+                {
+                    queue_message(17); // STAR FLEET TO
+                    queue_message(19); // STAR CRUISER 7
+                    queue_message(28); // MISSION COMPLETE
+                }
+                break;
+            case NO_ENERGY:
+                if (get_num_free_message_slots() > 2)
+                {
+                    queue_message(23); // MISSION ABORTED
+                    queue_message(24); // ZERO ENERGY
+                }
+                break;
+            case HIT_BY_ASTEROID:
+                if (get_num_free_message_slots() > 5)
+                {
+                    queue_message(17); // STAR FLEET TO
+                    queue_message(18); // ALL UNITS
+                    queue_message(19); // STAR CRUISER 7
+                    queue_message(20); // DESTROYED
+                    queue_message(01); // BY HUMAN ERROR
+                }
+            case ZYLON_FIRE:
+                if (get_num_free_message_slots() > 5)
+                {
+                    queue_message(17); // STAR FLEET TO
+                    queue_message(18); // ALL UNITS
+                    queue_message(19); // STAR CRUISER 7
+                    queue_message(20); // DESTROYED
+                    queue_message(21); // ZYLON FIRE
+                }
+                break;
+            case NO_STARBASES_LEFT:
+                if (get_num_free_message_slots() > 3)
+                {
+                    queue_message(17); // STAR FLEET TO
+                    queue_message(19); // STAR CRUISER 7
+                    queue_message(23); // MISSION ABORTED
+                }
+                break;
+            default:
+                //queue_message(0); // BLANK
+                break;
+            }
+        }
+        
+            last_secs2 = secs;
+    }
+    
+    if ((last_secs9 + rand_secs) <= secs)
+    {
+        // call random tasks
+        maneuver();
+        last_secs9 = secs;
+        rand_secs = rand()%(5-game_level)+2;
+    }
+
+    t_last = t_act;
+}
+
+
+void init_level(int level)
+{
+    int i,j,x,y;
+    
+    gettimeofday(&t_act, NULL);
+    secs = t_act.tv_sec - t_game.tv_sec;
+    last_secs = secs;
+    last_secs2 = secs;
+    last_secs9 = secs;
+    last_secs_min = secs;
+    rand_secs = secs;
+    
+    bottomscreen_state = COCKPIT;
+    class = -1;
+    rank = -1;
+    energy = 9999.0;
+    maxspeed = 9;
+    overall_enemies_destroyed = 0;
+    overall_energy = 0.0;
+    overall_damage_count = 0;
+    speed = 6;
+    computer = true;
+    aborted = RUNNING;
+    target_starbase_valid = false;
+    red_alert = false;
+    target_lock = -1;
+    
+    for (x=0; x<GMAP_MAX_X; x++)
+        for (y=0; y<GMAP_MAX_Y; y++)
+        {
+            gmap[x][y].layerA = 0;
+            gmap[x][y].layerB = 0;
+            gmap[x][y].moved = false;
+            gmap[x][y].ttm = 30;
+        }
+        
+    for (i=0; i < get_initial_num_starbases(level); i++)
+    {
+        do {
+            x = rand()%14+1;
+            y = rand()%6+1;
+        } while ((gmap[x][y].layerA != 0)||(!has_no_neighbour(x,y)));
+        
+        gmap[x][y].layerA = 5;
+    }
+    
+    for (i=1; i<=get_initial_num_enemies(level)/9;i++)
+        for (j=2;j<5;j++)
+        {
+            do {
+                x = rand()%14+1;
+                y = rand()%6+1;
+            } while ((gmap[x][y].layerA != 0)&&(starbase_surrounded() ==0));
+            
+            gmap[x][y].layerA = j;
+            gmap[x][y].ttm = secs + rand()%(60-game_level*5);
+        }
+        
+    do {
+            x = rand()%14+1;
+            y = rand()%6+1;
+    } while ((gmap[x][y].layerA != 0)&&(has_no_neighbour(x,y)));
+        
+    cruiser_sector_x = x;
+    cruiser_sector_y = y;
+    hyperwarp_target_sector_x = x;
+    hyperwarp_target_sector_y = y;
+    
+    warp_state = NOT_ENGAGED;
+    warp_sound = 0;
+    game_level=level;
+    set_target_starbase();
+    init_sector();
+    heartbeat();
+    setSoundFX(ENGINES);
+}
+
+void set_hyperwarp_marker(circlePosition joy)
+{
+    bool xmoved = (abs(joy.dx)>STICK_THRESHOLD);
+    bool ymoved = (abs(joy.dy)>STICK_THRESHOLD);
+
+    if ((xmoved)||(ymoved))
+    {
+        joystick.x = joy.dx/50;
+        joystick.y = joy.dy/50;
+        hyperwarp_location.x += joystick.x;
+        hyperwarp_location.y += joystick.y;
+    }
+}
+
+void repair()
+{
+    photon_left_avail = true;
+    photon_right_avail = true;
+    set_shield_state(WORKING);
+    set_engines_state(WORKING);
+    set_computer_state(WORKING);
+    set_sector_scan_state(WORKING);
+    set_subspace_radio_state(WORKING);
+    
+    maxspeed = 9;
+    overall_damage_count = overall_damage_count /2;
+    sprintf (vc_text, "OVERALL DAMAGE %d", overall_damage_count);
+    vc_print(vc_text);
+    toggle_energy_color = false;
+    energy = 9999.0;
+}
+    
+//calculate ranking
+int get_rank_absolute()
+{
+    int r;
+    
+    r = get_rank_m();
+    r = r+6*overall_enemies_destroyed;
+    r = r-(int)(overall_energy/150.0);
+    r = r-(t_act.tv_sec - t_game.tv_sec)/120;
+    r = r-18*overall_starbases_destroyed;
+    r = r-3*(get_initial_num_starbases(game_level)-overall_starbases_destroyed - get_num_of_starbases());
+    return r;
+}
+
+int get_rank_m()
+{
+    int m = 60;
+    switch (aborted)
+    {
+    case RUNNING:
+    case MISSION_COMPLETED:
+        switch (game_level)
+        {
+            case 0:
+                m = 80;
+                break;
+            case 1:
+                m = 76;
+                break;
+            case 2:
+                m = 60;
+                break;
+            case 3:
+                m = 111;
+                break;
+            default:
+                break;
+        }
+        break;
+    case NO_ENERGY:
+    case NO_STARBASES_LEFT:
+        switch (game_level)
+        {
+            case 0:
+                m = 60;
+                break;
+            case 1:
+                m = 60;
+                break;
+            case 2:
+                m = 50;
+                break;
+            case 3:
+                m = 100;
+                break;
+            default:
+                break;
+        }
+        break;
+    case HIT_BY_ASTEROID:
+    case ZYLON_FIRE:
+        switch (game_level)
+        {
+            case 0:
+                m = 40;
+                break;
+            case 1:
+                m = 50;
+                break;
+            case 2:
+                m = 40;
+                break;
+            case 3:
+                m = 90;
+                break;
+            default:
+                break;
+        }
+        break;
+    default:
+        break;
+    }
+    return m;
+}
+
+int get_rank(int level)
+{
+    int rank = get_rank_absolute();
+    rank = rank/31;
+    if (rank < 0) rank = 0;
+    return rank;
+}
+
+int get_class(int level)
+{
+    int rank = get_rank_absolute();    rank = rank%31/2+1;
+    if (rank < 0) rank = 0;
+    return rank;
 }
 
 void move_stars()
@@ -932,154 +1771,6 @@ void move_asteroid()
 	}
 }
 
-void create_new_enemy_photont(Vector3 source)
-{
-	Vector3 dest;
-	int i;
-	i = get_enemie_slot();
-	if (i>=0)
-	{
-		render_object[i].active = true;
-		render_object[i].objecttype = ENEMYPHOTONT;
-		render_object[i].mesh = PhotonT;
-		render_object[i].mesh.Position.X = source.X;
-		render_object[i].mesh.Position.Y = source.Y;
-		render_object[i].mesh.Position.Z = source.Z; 
-		render_object[i].xr = 0.02;
-		render_object[i].yr = 0.02;
-		render_object[i].zr = 0.02;
-		render_object[i].xt = 0.0;
-		render_object[i].yt = 0.0;
-		render_object[i].zt = 0.0;
-		dest = VectorScalar(VectorNormal(source), 10);
-		render_object[i].move.x = dest.X; 
-		render_object[i].move.y = dest.Y-0.5; 
-		render_object[i].move.z = dest.Z; 
-		setSoundFX (PHOTONT_FIRE_E);
-	} 
-}
-
-void create_new_friendly_photont()
-{
-	int i;
-	i = get_enemie_slot();
-	if (i>=0)
-	{
-		if (((photon_left_ready)&&(photon_left_avail))||((!photon_left_ready)&&(photon_right_avail)))
-		{
-			render_object[i].active = true;
-			render_object[i].objecttype = PHOTONT;
-			render_object[i].mesh = PhotonT;
-			render_object[i].mesh.Position.X = (photon_left_ready)?-10:10;
-			render_object[i].mesh.Position.Y = -30;
-			render_object[i].mesh.Position.Z = 100*(front_view?1:(-1)); 
-			render_object[i].xr = 0.02;
-			render_object[i].yr = 0.02;
-			render_object[i].zr = 0.02;
-			render_object[i].xt = 0.0;
-			render_object[i].yt = 0.0;
-			render_object[i].zt = 0.0;
-	
-			render_object[i].move.x = 0.0; 
-			render_object[i].move.y = -0.5; 
-			render_object[i].move.z = (velocity[speed] + 10); 
-			if (front_view) render_object[i].move.z = (velocity[speed] + 10)*(-1);
-			drain_energy(PHOTONT_FIRE);
-			setSoundFX (photon_left_ready?PHOTONT_FIRE_L:PHOTONT_FIRE_R);
-		}
-		photon_left_ready = !photon_left_ready;
-	} 
-}
-
-void create_new_asteroid()
-{
-	int i;
-	i = get_enemie_slot();
-	if (i>=0)
-	{
-		render_object[i].active = true;
-		render_object[i].objecttype = ASTEROID;
-		render_object[i].mesh = Asteroid;
-		render_object[i].mesh.Position.X = (float)rand_range((MAX_DIST/16)*(10-speed), 100);
-		render_object[i].mesh.Position.Y = (float)rand_range((MAX_DIST/16)*(10-speed), 100);
-		render_object[i].mesh.Position.Z = MAX_DIST; 
-		render_object[i].xr = (((float)(rand() % 20))-10)/1000;
-		render_object[i].yr = (((float)(rand() % 20))-10)/1000;
-		render_object[i].zr = (((float)(rand() % 20))-10)/1000;
-		render_object[i].xt = ((float)(rand() % 30) - 15);
-		render_object[i].yt = ((float)(rand() % 30) - 15);		
-		render_object[i].zt = (((float)MAX_DIST*speed) / 10.0)/VectorLength((Vector3){0.0,0.0,(float)MAX_DIST,0.0})*VectorLength(render_object[i].mesh.Position);
-		Vector3 Move = VectorNormal(VectorSub(render_object[i].mesh.Position, (Vector3){render_object[i].xt,render_object[i].yt,render_object[i].zt,0.0}));
-
-		int length = VectorLength(VectorSub(render_object[i].mesh.Position, (Vector3){render_object[i].xt,render_object[i].yt,render_object[i].zt,0.0}));
-	
-		render_object[i].move.x = Move.X; render_object[i].mesh.Position.X / length;
-		render_object[i].move.y = Move.Y; render_object[i].mesh.Position.Y / length;
-		render_object[i].move.z = Move.Z; render_object[i].mesh.Position.Z / length;
-	}
-}
-
-void create_new_star(int i)
-{
-	stars[i].x = (float)(rand()%MAX_DIST*2-MAX_DIST);
-	stars[i].y = (float)(rand()%MAX_DIST*2-MAX_DIST);
-	stars[i].z = (float)(rand()%MAX_DIST*2-MAX_DIST);
-
-	trail_stars[i] = stars[i];
-	move_star(i);
-}
-
-//handle game over delay
-time_t last_secs_gd = 0;
-bool gd_sound = false;
-void set_game_over_display_delay()
-{
-	gettimeofday(&t_act, NULL);
-	last_secs_gd = t_act.tv_sec;
-	gd_sound = true;
-}
-
-bool game_over_display_on()
-{
-	gettimeofday(&t_act, NULL);
-	if ((last_secs_gd + 5) <= t_act.tv_sec) return true;
-	return false;
-}
-
-// enemy ai
-
-int maneuver_loop = 0;
-void maneuver()
-{
-	int i;
-	float r = 1000.0;
-	
-		
-	for (i=0; i < MAX_NUM_OF_ENEMIES; i++)
-	{
-		if (render_object[i].active)
-		{
-			if ((render_object[i].objecttype == FIGHTER) ||
-				(render_object[i].objecttype == RAIDER) ||
-				(render_object[i].objecttype == ZYLONBASE))
-			{
-				Vector3 dir = (Vector3){render_object[i].mesh.Position.X, render_object[i].mesh.Position.Y, render_object[i].mesh.Position.Z-500, 0.0};
-				if (VectorLength(render_object[i].mesh.Position) < r)
-				{
-					dir = VectorScalar(VectorNormal((Vector3){rand()%20-10,rand()%20-10,rand()%20-10, 0.0}), rand()%3);
-					dir = VectorAdd(dir, (Vector3){0.0,0.0,(float)velocity[speed]*(-1.0),0.0});
-				} else {
-					dir = VectorScalar(VectorNormal(dir), velocity[7]);
-				}
-				
-				render_object[i].move.x = (render_object[i].move.x + dir.X)/2;
-				render_object[i].move.y = (render_object[i].move.y + dir.Y)/2;
-				render_object[i].move.z = (render_object[i].move.z + dir.Z)/2;
-			}
-		}
-	}
-}
-
 void rotate(circlePosition joy)
 {
 	bool xmoved = (abs(joy.dx)>STICK_THRESHOLD);
@@ -1162,6 +1853,44 @@ void rotate(circlePosition joy)
 		}
 	}
 }
+
+int move_on_gmap(int x, int y, int offset)
+{
+    float dist, d, t;
+    int mx, my, i, j;
+    mx = my = i = j = 99;
+    d = t = 99.99;
+    dist = sqrt(pow(abs(i-target_starbase_x),2)+pow(abs(j-target_starbase_y),2))+offset;
+                        
+    for (i = -1; i < 2; i++)
+    {
+        if ((i+x >= 0) && (i+x < GMAP_MAX_X))
+        {
+            for (j = -1; j < 2; j++)
+            {
+                if ((j+y >= 0) && (j+y < GMAP_MAX_Y))
+                {
+                    if (gmap[i+x][j+y].layerA == 0)
+                    {
+                        d = sqrt(pow(abs(i+x-target_starbase_x),2)+pow(abs(j+y-target_starbase_y), 2))+offset;
+                        if ((d < dist) && (d < t))
+                        {
+                            mx = i+x;
+                            my = j+y;
+                            t = d;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (t<50.0)
+    {
+        return my*GMAP_MAX_X+mx;
+    }
+    return -1;
+}
+
 
 void game_tasks()
 {
@@ -1306,10 +2035,6 @@ void game_tasks()
 		//if (gamestate != RUNNING) engine_vol = 0.0;
 		setSoundFXPrefs(ENGINES, engine_vol,0);
 	}
-	
-	gspWaitForVBlank(); // wait for frame
-	  	
-	draw_top_screen();
 }
 
 int main() 
@@ -1380,27 +2105,38 @@ int main()
 	RotationA = (Vector3){0.0,0.0,0.0};
 	Shuttle.Position = PositionA;
 	Shuttle.Rotation = RotationA;
+    
+    // Zeitsteuerung
+    double previousTime = get_current_time();
+    double accumulator = 0.0;
   
   // Main loop
   while (aptMainLoop()&&(gamestate!=GAME_EXIT))
   {
+      // Zeitberechnung für den aktuellen Frame
+      double currentTime = get_current_time();
+      double frameTime = currentTime - previousTime;
+      previousTime = currentTime;
+
 	  fps_counter++;
-	circlePosition joy;
-	checkSoundFX();
-	
-	// Read which buttons are currently pressed or not
-    hidScanInput();
-	
-	//Read the touch screen coordinates
-	hidTouchRead(&touch);
-	if ((touch.px != 0) && (touch.py != 0))
+      circlePosition joy;
+      checkSoundFX();
+      
+      // Read which buttons are currently pressed or not
+      hidScanInput();
+      
+      //Read the touch screen coordinates
+      hidTouchRead(&touch);
+      
+      if ((touch.px != 0) && (touch.py != 0))
 		touch_down = true;
-	
-	//Read the CirclePad position
-	hidCircleRead(&joy);
-	
-	if (energy != 0) sprintf (debug_string, "OK");
-	switch (gamestate) {
+      
+      //Read the CirclePad position
+      hidCircleRead(&joy);
+      
+      gspWaitForVBlank(); // wait for frame
+      
+      switch (gamestate) {
 		case GAME_RESUME:
 			char* ritems[2] = {"RESUME", "RESTART GAME"};
 			gspWaitForVBlank(); // wait for frame
@@ -1444,10 +2180,9 @@ int main()
 			draw_bottom_screen();			
 			draw_menu(items, 5);
 			aborted = RUNNING; // to clear aborted game
+            game_tasks(); // Spiel-Logik
 			
-			game_tasks();
-			
-			// handle menu input
+            // handle menu input
 			if ((hidKeysDown() & KEY_DDOWN)||(hidKeysDown() & KEY_CPAD_DOWN)){
 				menu_item_selected++;
 				if (menu_item_selected > 4) menu_item_selected=0;
@@ -1504,9 +2239,23 @@ int main()
 			game_tasks();
 				
 			break;
-		case GAME_RUNNING:	
+		case GAME_RUNNING:
 			menu_item_selected = 0;
-			game_tasks();
+
+            // Begrenzen des frameTime (z. B. bei Pausen oder Verzögerungen)
+            if (frameTime > 0.25)
+                frameTime = 0.25;
+
+            accumulator += frameTime;
+
+            
+            // Simulation in festen Zeitschritten aktualisieren
+            while (accumulator >= FIXED_DELTA_TIME)
+            {
+                game_tasks(); // Spiel-Logik
+                accumulator -= FIXED_DELTA_TIME;
+            }
+
 			if (hidKeysDown() & KEY_R) lock_next_target(true);
 			if (hidKeysDown() & KEY_L) lock_next_target(false);
 			if (hidKeysDown() & KEY_Y){ // HYPERWARP
@@ -1546,6 +2295,7 @@ int main()
 						break;
 				}
 			}
+              
 			if ((warp_state == NOT_ENGAGED)||(warp_speed < 50))
 			{
 				if (red_alert)
@@ -1722,7 +2472,9 @@ int main()
 	
 	if (gamestate == GAME_EXIT)
 		break;
-	
+              
+    draw_top_screen();
+
     gfxFlushBuffers();	// flush framebuffers
     gfxSwapBuffers();	// swap framebuffers	
   }
@@ -1740,718 +2492,3 @@ int countdown()
 {
 	return(starbase_destruction_timer-secs);
 }
-
-void check_starbase_destroyed()
-{
-	if (starbase_surrounded() > 0)
-	{
-		target_starbase_x = starbase_surrounded()/GMAP_MAX_X;
-		target_starbase_y = starbase_surrounded()%GMAP_MAX_X;
-		if ((target_starbase_x > 0) && (target_starbase_x < GMAP_MAX_X) && (target_starbase_y > 0) && (target_starbase_y < GMAP_MAX_Y))
-		{
-			target_starbase_valid = true;
-			if (!target_timer_running)
-			{
-				starbase_destruction_timer = secs + 60;
-				target_timer_running = true;
-			}
-		}
-	} else {
-		target_timer_running = false;
-	}
-	
-	if (target_starbase_valid)
-	{
-		if (is_starbase_surrounded(target_starbase_x, target_starbase_y)&&(countdown() < 0)) //if (starbase_surrounded()&&(starbase_destruction_timer < sec))
-		{
-			if (subspace_radio_avail())
-			{
-				queue_message(9);
-				queue_message(0);
-				queue_message(9);
-				queue_message(0);
-				queue_message(9);
-				setSoundFX(MESSAGE);
-			}
-			gmap[target_starbase_x][target_starbase_y].layerA = 2;
-			gmap[target_starbase_x][target_starbase_y].ttm = secs + rand()%(60-game_level*5);
-			if ((target_starbase_x == cruiser_sector_x)&&(target_starbase_y == cruiser_sector_y)) 
-			{
-				int x, y, z;
-				int s = get_active_slot(STARBASE);
-				if (s >=0) 
-				{
-					x = (int)(render_object[s].mesh.Position.X);
-					y = (int)(render_object[s].mesh.Position.Y);
-					z = (int)(render_object[s].mesh.Position.Z);
-				}
-				init_sector();
-				if (s >=0) hit(x,y,z);
-				stopSoundFX(DOCKING);
-				docking_state = BROKEN;
-			}
-			overall_starbases_destroyed++;
-			target_timer_running = false;
-			target_starbase_valid = false;
-		}
-	} else 	set_target_starbase();		
-}
-
-int move_on_gmap(int x, int y, int offset)
-{
-	float dist, d, t;
-	int mx, my, i, j;
-	mx = my = i = j = 99;
-	d = t = 99.99;
-	dist = sqrt(pow(abs(i-target_starbase_x),2)+pow(abs(j-target_starbase_y),2))+offset;
-						
-	for (i = -1; i < 2; i++)
-	{
-		if ((i+x >= 0) && (i+x < GMAP_MAX_X))
-		{
-			for (j = -1; j < 2; j++)
-			{
-				if ((j+y >= 0) && (j+y < GMAP_MAX_Y))
-				{
-					if (gmap[i+x][j+y].layerA == 0)
-					{
-						d = sqrt(pow(abs(i+x-target_starbase_x),2)+pow(abs(j+y-target_starbase_y), 2))+offset;
-						if ((d < dist) && (d < t))
-						{
-							mx = i+x;
-							my = j+y;
-							t = d;
-						}
-					}
-				}
-			}
-		} 
-	}
-	if (t<50.0)
-	{
-		return my*GMAP_MAX_X+mx;
-	} 
-	return -1;
-}
-
-int max_speed()
-{
-	if (energy <= 0) return maxspeed;
-	if (!engines_avail()) return rand()%3+1;
-	return 9;
-}
-
-void heartbeat()
-{
-	int msec = 0;
-	int i, j;
-	
-	gettimeofday(&t_act, NULL);
-	secs = t_act.tv_sec - t_game.tv_sec;
-
-	if ((last_secs + 1) <= secs)
-	{
-		// call secondly tasks
-		blink_on = !blink_on;
-		last_secs = secs;
-		counter++;
-		
-		fps = fps_counter;
-		fps_counter = 0;
-		
-		copygmap();
-		check_starbase_destroyed();
-		
-		for (i=0; i < MAX_NUM_OF_ENEMIES; i++)
-		{
-			if (render_object[i].active)
-			{
-				if ((render_object[i].objecttype == FIGHTER) ||
-					(render_object[i].objecttype == RAIDER) ||
-					(render_object[i].objecttype == ZYLONBASE))
-					{
-						if(VectorLength(render_object[i].mesh.Position) < FIRE_RANGE) 
-						{
-							int photon_rand = rand()%(300);
-							
-							if (photon_rand<(10*game_level+50))  // gl0:50 gl1:60 gl2:70 gl3:80
-							{
-								create_new_enemy_photont(render_object[i].mesh.Position);
-							}
-						}
-					}
-			}
-		}
-		
-		// handle messages
-		
-		if (messages[message_index] < sizeof(message_text)/sizeof(message_text[0]))
-		{
-			if (messages[message_index] >= 0)
-			{
-				sprintf(act_message, message_text[messages[message_index]]);
-				messages[message_index] = -1;
-				message_index++;
-				if (message_index >= MAX_MESSAGES) message_index = 0;
-			} else act_message[0] = '\0';
-		} else 	if (messages[message_index] == sizeof(message_text)/sizeof(message_text[0]))
-			{
-				sprintf(act_message,"%s", message1);
-				messages[message_index] = -1;
-				message_index++;
-				if (message_index >= MAX_MESSAGES) message_index = 0;
-			} else	if (messages[message_index] == sizeof(message_text)/sizeof(message_text[0]) + 1)
-					{
-						sprintf(act_message, "%s", message2);
-						messages[message_index] = -1;
-						message_index++;
-						if (message_index >= MAX_MESSAGES) message_index = 0;
-					} else act_message[0] = '\0';
-
-		if (gamestate == GAME_RUNNING) 
-		{
-			drain_energy(SECONDLY);
-			// end of hyperspace
-			if (warp_state == IN_HYPERSPACE)
-			{
-				if (energy == 0) sprintf (debug_string, "HEARTBEAT1");
-				if (hyperspace_ttr-- >= 0)
-				{
-					setSoundFX(TIC);
-					drain_energy(HYPERSPACE);
-					cruiser_sector_x = hyperwarp_target_sector_x + (int)(dx*hyperspace_ttr);
-					cruiser_sector_y = hyperwarp_target_sector_y + (int)(dy*hyperspace_ttr);
-					if (cruiser_sector_x < 0) cruiser_sector_x = GMAP_MAX_X-1;
-					if (cruiser_sector_x >= GMAP_MAX_X) cruiser_sector_x = 0;
-					if (cruiser_sector_y < 0) cruiser_sector_y = GMAP_MAX_Y-1;
-					if (cruiser_sector_y >= GMAP_MAX_Y) cruiser_sector_y = 0;
-				} else {
-					queue_message(11); // HYPERSPACE COMPLETE
-					warp_state = ABORTED;
-					cruiser_sector_x = hyperwarp_target_sector_x;
-					cruiser_sector_y = hyperwarp_target_sector_y;
-					if (energy == 0) {
-						sprintf (debug_string, "HEARTBEAT2");
-					} else {
-						init_sector();
-						if (energy == 0) sprintf (debug_string, "HEARTBEAT3");
-					}
-				}
-			}
-		}
-	}
-	
-	if ((last_secs2 + 3) <= secs)
-	{
-		// call 3-secondly tasks
-		blink_3s_on = !blink_3s_on;
-		
-		if (gamestate == GAME_END)
-		{
-			switch (aborted)
-			{
-			case MISSION_COMPLETED:
-				if (get_num_free_message_slots() > 3)
-				{
-					queue_message(17); // STAR FLEET TO
-					queue_message(19); // STAR CRUISER 7
-					queue_message(28); // MISSION COMPLETE
-				}
-				break;
-			case NO_ENERGY:
-				if (get_num_free_message_slots() > 2)
-				{
-					queue_message(23); // MISSION ABORTED
-					queue_message(24); // ZERO ENERGY
-				}
-				break;
-			case HIT_BY_ASTEROID:
-				if (get_num_free_message_slots() > 5)
-				{
-					queue_message(17); // STAR FLEET TO
-					queue_message(18); // ALL UNITS
-					queue_message(19); // STAR CRUISER 7
-					queue_message(20); // DESTROYED
-					queue_message(01); // BY HUMAN ERROR
-				}
-			case ZYLON_FIRE:
-				if (get_num_free_message_slots() > 5)
-				{
-					queue_message(17); // STAR FLEET TO
-					queue_message(18); // ALL UNITS
-					queue_message(19); // STAR CRUISER 7
-					queue_message(20); // DESTROYED
-					queue_message(21); // ZYLON FIRE
-				}
-				break;
-			case NO_STARBASES_LEFT:
-				if (get_num_free_message_slots() > 3)
-				{
-					queue_message(17); // STAR FLEET TO
-					queue_message(19); // STAR CRUISER 7
-					queue_message(23); // MISSION ABORTED
-				}
-				break;
-			default:
-				//queue_message(0); // BLANK
-				break;
-			}
-		}
-		
-			last_secs2 = secs;
-	}
-	
-	if ((last_secs9 + rand_secs) <= secs)
-	{
-		// call random tasks
-		maneuver();
-		last_secs9 = secs;
-		rand_secs = rand()%(5-game_level)+2;
-	}
-
-	t_last = t_act;
-}
-
-void drain_energy(enum energy_consume consume)
-{
-	switch(consume) {
-		case SECONDLY:
-			energy -= 0.25; // energy consumed by life support system
-			overall_energy += 0.25;
-			energy -= speed_costs[speed]; // energy consumed for twin-ion speed
-			overall_energy += speed_costs[speed];
-			if (shield && shield_avail()) 
-			{
-				energy -= 2.0; // energy consumed by shields
-				overall_energy += 2.0;
-			}
-			if (computer && computer_avail()) 
-			{
-				energy -= 0.5; // energy consumed by computer
-				overall_energy += 0.5;
-			}
-			break;
-		case ASTEROID_HIT:
-			sprintf (vc_text, "HIT BY ASTEROID");
-			vc_print(vc_text);
-			energy -= 50.0; // energy consumed by asteroid hit
-			overall_energy += 50.0;
-			break;
-		case PHOTONT_HIT:
-			sprintf (vc_text, "HIT BY PHOTONTORPEDO");
-			vc_print(vc_text);
-			energy -= 100.0; // energy consumed by photon torpedo hit
-			overall_energy += 100;
-			break;
-		case PHOTONT_FIRE:
-			energy -= 10.0; // energy consumed by fiering photon torpedo
-			overall_energy += 10.0;
-			break;
-		case HYPERSPACE:	
-			energy -= HYPERWARP_COSTS;
-			overall_energy += HYPERWARP_COSTS;
-			
-		default:
-			break;
-	}
-	
-	if (energy<0) energy = 0;
-	if (energy <= 0) 
-	{
-		set_shield_state(DESTROYED);
-		set_computer_state(DESTROYED);
-		photon_left_avail = false;
-		photon_right_avail = false;
-		maxspeed--;
-	}
-	if (maxspeed < 0) maxspeed = 0;
-	
-	if (energy < 1000.0)
-	{
-		toggle_energy_color = !toggle_energy_color;
-	} else {
-		toggle_energy_color = false;
-	}
-}
-
-void set_hyperwarp_marker(circlePosition joy)
-{
-	bool xmoved = (abs(joy.dx)>STICK_THRESHOLD);
-    bool ymoved = (abs(joy.dy)>STICK_THRESHOLD);
-
-	if ((xmoved)||(ymoved))
-    {
-		joystick.x = joy.dx/50;
-		joystick.y = joy.dy/50;
-		hyperwarp_location.x += joystick.x;
-		hyperwarp_location.y += joystick.y;
-	}
-}
-
-void repair()
-{
-	photon_left_avail = true;
-	photon_right_avail = true;
-	set_shield_state(WORKING);
-	set_engines_state(WORKING);
-	set_computer_state(WORKING);
-	set_sector_scan_state(WORKING);
-	set_subspace_radio_state(WORKING);
-	
-	maxspeed = 9;
-	overall_damage_count = overall_damage_count /2;
-	sprintf (vc_text, "OVERALL DAMAGE %d", overall_damage_count);
-	vc_print(vc_text);
-	toggle_energy_color = false;
-	energy = 9999.0;
-}
-
-void init_game()
-{
-	int i,j;
-	front_view = true;
-	computer = false;
-	set_computer_state(WORKING);
-	shield = false;
-	set_shield_state(WORKING);
-	photon_right_avail = true;
-	photon_left_avail = true;
-	set_engines_state(WORKING);
-	set_subspace_radio_state(WORKING);
-	set_sector_scan_state(WORKING);
-	toggle_energy_color = false;
-	menu_item_selected = 0;
-	message_index = 0;
-	starbase_destruction_timer = 999999;
-	ASlot = 0;
-	last_secs = 0;
-	last_secs2 = 0;
-	last_secs9 = 0;
-	last_secs_min = 0;
-	rand_secs = 0;
-	energy = 9999.0; // to prevent messages
-	target_lock = -1;
-	
-	red_alert = false;
-	
-	maxspeed = 9;
-	speed = 6;
-	
-	display_diagnostic = false;
-	
-	focal_distance = FOCAL_DISTANCE;
-	
-	gamestate = GAME_SPLASH;
-	bottomscreen_state = NO_SCREEN;
-	warp_state = NOT_ENGAGED;
-	warp_sound = 0;
-	
-	for (i = 0; i < MAX_MESSAGES; i++)
-		messages[i] = -1;
-	sprintf (message1, "\0");
-	sprintf (message2, "\0");
-	queue_message(0);
-	
-	gettimeofday(&t_start, NULL);
-	gettimeofday(&t_game, NULL);
-	gettimeofday(&t_last, NULL);
-	gettimeofday(&t_act, NULL);
-	
-	vc_init();
-	
-	for (i=0; i < NUM_STARS; i++)
-		create_new_star(i);
-	for (i=0; i < sizeof debris / sizeof *debris; i++)
-	{
-		debris[i].active = false;
-		debris[i].ttl = 0;
-	}
-	for (i=0;i < 16;i++)
-		for (j=0; j < 8; j++)
-			gmap[i][j].layerA = 0;
-}
-
-
-void init_sector()
-{
-	int i, j;
-	docking_state = NONE;
-	target_lock = -1;
-	
-	for (i=0; i<MAX_NUM_OF_ENEMIES; i++) //clear all enemy slots 
-	{
-		render_object[i].active = false;
-	}
-	
-	switch (gmap[cruiser_sector_x][cruiser_sector_y].layerA) {
-		case 1: 
-		case 2: 
-		case 3: 
-		case 4: //fill with enemies
-			sprintf (vc_text, "%d ENEMIES IN SECTOR", gmap[cruiser_sector_x][cruiser_sector_y].layerA);
-			vc_print(vc_text);
-			for (i=0; i<gmap[cruiser_sector_x][cruiser_sector_y].layerA; i++)
-			{
-				j = get_enemie_slot();
-				if (j >= 0)
-				{
-					Vector3 dir = VectorNormal((Vector3){1.0,1.0,1.0, 1.0});
-					dir = VectorScalar(dir, 12);
-					render_object[j].move.x = dir.X;
-					render_object[j].move.y = dir.Y;
-					render_object[j].move.z = dir.Z;
-					render_object[j].dir.x = game_level;
-					render_object[j].dir.y = 0;
-					render_object[j].dir.z = 600;
-					render_object[j].xr = 0;
-					render_object[j].yr = 0;
-					render_object[j].zr = 0;
-					render_object[j].active = true;
-					render_object[j].mesh = (rand()%2 == 0)?ZylonFighter:TieFighter;
-					render_object[j].mesh.Position.X = (float)rand_range(1600, 1500);
-					render_object[j].mesh.Position.Y = (float)rand_range(1600, 1500);
-					render_object[j].mesh.Position.Z = (float)rand_range(1600, 1500);
-					render_object[j].objecttype = FIGHTER;
-				} 
-			}
-			red_alert = true;
-			break;
-		case 5: //set up starbase
-			sprintf (vc_text, "STARBASE SECTOR");
-			vc_print(vc_text);
-			j = get_enemie_slot();
-			if (j >= 0)
-			{
-				Vector3 dir = VectorNormal((Vector3){0.0,0.0,0.0, 1.0});
-				dir = VectorScalar(dir, 0); //dont move
-				render_object[j].move.x = dir.X;
-				render_object[j].move.y = dir.Y;
-				render_object[j].move.z = dir.Z;
-				render_object[j].active = true;
-				render_object[j].mesh = Starbase;
-				render_object[j].mesh.Position.X = (float)rand_range(1600, 1500);
-				render_object[j].mesh.Position.Y = (float)rand_range(1600, 1500);
-				render_object[j].mesh.Position.Z = (float)rand_range(1600, 1500);
-				render_object[j].objecttype = STARBASE;
-				render_object[j].xr = 0;
-				render_object[j].yr = 0.174533/5; //rotate slightly
-				render_object[j].zr = 0;
-			} 
-			
-			break;
-		default:
-			break;
-	}
-	hyperwarp_target_sector_x = -1;
-	hyperwarp_target_sector_y = -1;
-	maneuver(); //set up enemy directions
-	create_new_asteroid(); //set up first asteroid
-}
-
-void init_level(int level)
-{
-	int i,j,x,y;
-	
-	gettimeofday(&t_act, NULL);
-	secs = t_act.tv_sec - t_game.tv_sec;
-	last_secs = secs;
-	last_secs2 = secs;
-	last_secs9 = secs;
-	last_secs_min = secs;
-	rand_secs = secs;
-	
-	bottomscreen_state = COCKPIT;
-	class = -1;
-	rank = -1;
-	energy = 9999.0;
-	maxspeed = 9;
-	overall_enemies_destroyed = 0;
-	overall_energy = 0.0;
-	overall_damage_count = 0;
-	speed = 6;
-	computer = true;
-	aborted = RUNNING;
-	target_starbase_valid = false;
-	red_alert = false;
-	target_lock = -1;
-	
-	for (x=0; x<GMAP_MAX_X; x++)
-		for (y=0; y<GMAP_MAX_Y; y++)
-		{
-			gmap[x][y].layerA = 0;
-			gmap[x][y].layerB = 0;
-			gmap[x][y].moved = false;
-			gmap[x][y].ttm = 30;			 
-		}
-		
-	for (i=0; i < get_initial_num_starbases(level); i++)
-	{
-		do {
-			x = rand()%14+1;
-			y = rand()%6+1;
-		} while ((gmap[x][y].layerA != 0)||(!has_no_neighbour(x,y)));
-		
-		gmap[x][y].layerA = 5;
-	}
-	
-	for (i=1; i<=get_initial_num_enemies(level)/9;i++)
-		for (j=2;j<5;j++)
-		{
-			do {
-				x = rand()%14+1;
-				y = rand()%6+1;
-			} while ((gmap[x][y].layerA != 0)&&(starbase_surrounded() ==0));
-			
-			gmap[x][y].layerA = j;
-			gmap[x][y].ttm = secs + rand()%(60-game_level*5);
-		}
-		
-	do {
-			x = rand()%14+1;
-			y = rand()%6+1;
-	} while ((gmap[x][y].layerA != 0)&&(has_no_neighbour(x,y)));
-		
-	cruiser_sector_x = x;
-	cruiser_sector_y = y;
-	hyperwarp_target_sector_x = x;
-	hyperwarp_target_sector_y = y;
-	
-	warp_state = NOT_ENGAGED;
-	warp_sound = 0;
-	game_level=level;
-	set_target_starbase();
-	init_sector();
-	heartbeat();	
-	setSoundFX(ENGINES);
-}
-	
-int get_initial_num_starbases(int level)
-{
-	return 3+level;
-}
-
-int get_initial_num_enemies(int level)
-{
-	// has to be dividable by 9!
-	return (3+level)*9; //27, 36, 45, 54
-}
-
-int get_num_of_enemies()
-{
-	int i,j,r = 0;
-	for (i=0; i< GMAP_MAX_X; i++)
-		for(j=0; j< GMAP_MAX_Y; j++)
-			if ((gmap[i][j].layerA > 0) && (gmap[i][j].layerA < 5)) r+=gmap[i][j].layerA;
-	return r;
-}
-
-int get_num_of_starbases()
-{
-	int i,j,r = 0;
-	for (i=0; i< GMAP_MAX_X; i++)
-		for(j=0; j< GMAP_MAX_Y; j++)
-			if (gmap[i][j].layerA == 5) r++;
-	return r;
-}
-
-//calculate ranking
-int get_rank_absolute()
-{
-	int r;
-	
-	r = get_rank_m();
-	r = r+6*overall_enemies_destroyed;
-	r = r-(int)(overall_energy/150.0);
-	r = r-(t_act.tv_sec - t_game.tv_sec)/120;
-	r = r-18*overall_starbases_destroyed;
-	r = r-3*(get_initial_num_starbases(game_level)-overall_starbases_destroyed - get_num_of_starbases());
-	return r;
-}
-
-int get_rank_m()
-{
-	int m = 60;
-	switch (aborted)
-	{
-	case RUNNING:
-	case MISSION_COMPLETED:
-		switch (game_level)
-		{
-			case 0:
-				m = 80;
-				break;
-			case 1:
-				m = 76;
-				break;
-			case 2:
-				m = 60;
-				break;
-			case 3:
-				m = 111;
-				break;
-			default:
-				break;
-		}
-		break;
-	case NO_ENERGY:
-	case NO_STARBASES_LEFT:
-		switch (game_level)
-		{
-			case 0:
-				m = 60;
-				break;
-			case 1:
-				m = 60;
-				break;
-			case 2:
-				m = 50;
-				break;
-			case 3:
-				m = 100;
-				break;
-			default:
-				break;
-		}
-		break;
-	case HIT_BY_ASTEROID:
-	case ZYLON_FIRE:
-		switch (game_level)
-		{
-			case 0:
-				m = 40;
-				break;
-			case 1:
-				m = 50;
-				break;
-			case 2:
-				m = 40;
-				break;
-			case 3:
-				m = 90;
-				break;
-			default:
-				break;
-		}
-		break;
-	default:
-		break;
-	}
-	return m;
-}
-
-int get_rank(int level)
-{
-	int rank = get_rank_absolute();
-	rank = rank/31;
-	if (rank < 0) rank = 0;
-	return rank;
-}
-
-int get_class(int level)
-{
-	int rank = get_rank_absolute();	rank = rank%31/2+1;
-	if (rank < 0) rank = 0;
-	return rank;
-}
-
-

@@ -145,5 +145,7 @@ extern bool target_timer_running;
 extern int countdown();
 extern int get_rank_m();
 extern int get_rank_absolute();
+extern void create_new_star(int i);
+extern int get_num_of_enemies();
 
 extern char debug_string[];

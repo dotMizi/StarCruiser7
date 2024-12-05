@@ -32,6 +32,415 @@ float phi;
 float rho = INFINITY;
 bool shield_active= false;
 
+void draw_block (u8* fbAdr, int posx, int posy, int length, int width, int color, int max_width)
+{
+    int x,y;
+    
+    for (x=posx; (x < posx+length) && (x < max_width); x++)
+        for (y=posy; (y < posy+width) && (y < HEIGHT);y++)
+        {
+            int idx;
+            idx = ((x*HEIGHT)+y)*3;
+            fbAdr[idx+0] = color_b[color];
+            fbAdr[idx+1] = color_g[color];
+            fbAdr[idx+2] = color_r[color];
+        }
+}
+
+void draw_box(u8* fbAdr, int posx, int posy, int length, int height, int lwidth, int color, int max_width)
+{
+        draw_block(
+            fbAdr,
+            posx,
+            posy,
+            length+1,
+            lwidth,
+            color,
+            max_width);
+        
+        draw_block(
+            fbAdr,
+            posx,
+            posy + height,
+            length+1,
+            lwidth,
+            color,
+            max_width);
+            
+        draw_block(
+            fbAdr,
+            posx,
+            posy,
+            lwidth,
+            height,
+            color,
+            max_width);
+            
+        draw_block(
+            fbAdr,
+            posx + length,
+            posy,
+            lwidth,
+            height,
+            color,
+            max_width);
+}
+
+void draw_asteroid(u8* fbAdr_L, u8* fbAdr_R)
+{
+    if (render_object[ASlot].active)
+    {
+        if(VectorLength(render_object[ASlot].mesh.Position) > 20)
+        {
+                        Render(render_object[ASlot].mesh, front_view, ASTEROID);
+        }
+    }
+}
+    
+void draw_trails(u8* fbAdr_L, u8* fbAdr_R)
+{
+    int i;
+    for (i=0; i<NUM_STARS; i++)
+    {
+        int j;
+        Vector3 start = (Vector3) {trail_stars[i].x, trail_stars[i].y, trail_stars[i].z, 0};
+        Vector3 trail = VectorSub(start, (Vector3){stars[i].x, stars[i].y, stars[i].z, 0});
+        Vector3 step = VectorNormal(trail);
+        int dist = abs((int)VectorLength(trail));
+        
+        checkSoundFX();
+        
+        for (j=0; j<dist; j++)
+        {
+            int posX, posY;
+            if ((int)start.Z  > focal_distance)
+            {
+            
+                posX = (int)(focal_distance * start.X / start.Z)+WIDTH_TOP/2;
+                posY = (int)(focal_distance * start.Y / start.Z)+HEIGHT/2;
+
+                if ((posX < 0) || (posX > WIDTH_TOP))
+                {
+                    create_new_star(i);
+                    continue;
+                }
+                if ((posY < 0) || (posY > HEIGHT))
+                {
+                    create_new_star(i);
+                    continue;
+                }
+                if ((posX > 0) && (posX < WIDTH_TOP) && (posY > 0) && (posY < HEIGHT))
+                {
+                    int idx;
+                    int x, y;
+                    int separation;
+                
+                    separation = get_stereo_separation(start.Z);
+                
+                    if ((posX + separation/2 + STAR_WIDTH > WIDTH_TOP) ||(posX - separation/2 < 0))
+                    {
+                        create_new_star(i);
+                        continue;
+                    }
+
+                    for (x=0; x<STAR_WIDTH; x++)
+                        for (y=0; y<STAR_WIDTH; y++)
+                        {
+                            int r, g, b;
+                            r = g = b = (int)(color_b[C_STARS]*(1-start.Z/MAX_DIST)+55)-j;
+                            if (shield_active)
+                            {
+                                if(g<225)
+                                {
+                                    g += 30;
+                                } else g = 255;
+                                r = r/2;
+                            }
+                        
+                            idx=(((posX+x-separation/2)*HEIGHT)+posY+y)*3;
+                            fbAdr_L[idx+0] = b;
+                            fbAdr_L[idx+1] = g;
+                            fbAdr_L[idx+2] = r;
+                        
+                            idx=(((posX+x+separation/2)*HEIGHT)+posY+y)*3;
+                            fbAdr_R[idx+0] = b;
+                            fbAdr_R[idx+1] = g;
+                            fbAdr_R[idx+2] = r;
+                        }
+                }
+            } else
+            {
+                create_new_star(i);
+                continue;
+            }
+            start = VectorSub(start, step);
+        }
+    }
+}
+
+void draw_stars(u8* fbAdr_L, u8* fbAdr_R)
+{
+    int i;
+    int dir = 1;
+    
+    if (!front_view) dir = dir * (-1);
+    
+    for (i=0; i<NUM_STARS; i++)
+    {
+        int posX, posY;
+        
+        checkSoundFX();
+        
+        if ((int)stars[i].z*dir  > focal_distance)
+        {
+            posX = (int)(focal_distance * dir * stars[i].x / stars[i].z)+WIDTH_TOP/2;
+            posY = (int)(focal_distance * dir * stars[i].y / stars[i].z)+HEIGHT/2;
+
+            if ((posX < 0) || (posX > WIDTH_TOP))
+            {
+                create_new_star(i);
+                continue;
+            }
+            if ((posY < 0) || (posY > HEIGHT))
+            {
+                create_new_star(i);
+                continue;
+            }
+            if ((posX > 0) && (posX < WIDTH_TOP) && (posY > 0) && (posY < HEIGHT))
+            {
+                int idx;
+                int x, y;
+                int separation;
+                
+                separation = get_stereo_separation(stars[i].z);
+                
+                if ((posX + separation/2 + STAR_WIDTH > WIDTH_TOP) ||(posX - separation/2 < 0))
+                {
+                    create_new_star(i);
+                    continue;
+                }
+
+                for (x=0; x<STAR_WIDTH; x++)
+                    for (y=0; y<STAR_WIDTH; y++)
+                    {
+                        int r, g, b;
+                        r = g = b = (int)(color_b[C_STARS]*(1-stars[i].z/MAX_DIST*dir)+55);
+                        if (shield_active)
+                        {
+                            if(g<225)
+                            {
+                                g += 30;
+                            } else g = 255;
+                            r = r/2;
+                        }
+                        
+                        idx=(((posX+x-separation/2)*HEIGHT)+posY+y)*3;
+                        fbAdr_L[idx+0] = b;
+                        fbAdr_L[idx+1] = g;
+                        fbAdr_L[idx+2] = r;
+                        
+                        idx=(((posX+x+separation/2)*HEIGHT)+posY+y)*3;
+                        fbAdr_R[idx+0] = b;
+                        fbAdr_R[idx+1] = g;
+                        fbAdr_R[idx+2] = r;
+                    }
+            }
+        } else {
+            create_new_star(i);
+        }
+    }
+}
+
+void draw_debris(u8* fbAdr_L, u8* fbAdr_R)
+{
+    int i;
+    int dir = 1;
+    
+    if (!front_view) dir = dir * (-1);
+    
+    for (i=0; i<MAX_NUM_DEBRIS; i++)
+    {
+        int posX, posY;
+        if (debris[i].active && ((int)debris[i].pos.z*dir  > 0))
+        {
+            posX = (int)(focal_distance * dir * debris[i].pos.x / debris[i].pos.z)+WIDTH_TOP/2;
+            posY = (int)(focal_distance * dir * debris[i].pos.y / debris[i].pos.z)+HEIGHT/2;
+
+            if ((posX < 0) || (posX > WIDTH_TOP))
+            {
+                debris[i].active = false;
+                continue;
+            }
+            if ((posY < 0) || (posY > HEIGHT))
+            {
+                debris[i].active = false;
+                continue;
+            }
+            if ((posX > 0) && (posX < WIDTH_TOP) && (posY > 0) && (posY < HEIGHT))
+            {
+                int idx;
+                int x, y;
+                int separation;
+                
+                separation = STEREO_SEPARATION;
+                if (debris[i].pos.z*dir > MAX_DIST/10) separation = 3*STEREO_SEPARATION/4;
+                if (debris[i].pos.z*dir > MAX_DIST/7) separation = STEREO_SEPARATION/2;
+                if (debris[i].pos.z*dir > MAX_DIST/2) separation = STEREO_SEPARATION/4;
+                if (debris[i].pos.z*dir > 2*MAX_DIST/3) separation = 0;
+                
+                if (posX + separation + DEBRIS_WIDTH > WIDTH_TOP)
+                {
+                    debris[i].active = false;
+                    continue;
+                }
+
+                for (x=0; x<DEBRIS_WIDTH; x++)
+                    for (y=0; y<DEBRIS_WIDTH; y++)
+                    {
+                        idx=(((posX+x)*HEIGHT)+posY+y)*3;
+                        int r, g, b;
+                        r = g = b = (int)(color_b[C_STARS]*(1-stars[i].z/MAX_DIST*dir)+55);
+                        if (shield_active)
+                        {
+                            if(g<225)
+                            {
+                                g += 30;
+                            } else g = 255;
+                            r = r/2;
+                        }
+                        
+                        
+                        fbAdr_L[idx+0] = b;
+                        fbAdr_L[idx+1] = g;
+                        fbAdr_L[idx+2] = r;
+                        
+                        idx=(((posX+x+separation)*HEIGHT)+posY+y)*3;
+                        fbAdr_R[idx+0] = b;
+                        fbAdr_R[idx+1] = g;
+                        fbAdr_R[idx+2] = r;
+                    }
+            }
+        } else {
+            debris[i].active = false;
+        }
+    }
+}
+
+void draw_text_XXL (char* text, u8* fbAdr, int posX, int posY, int color, int max_width)
+{
+    int i;
+    int x, y;
+    
+    x = posX;
+    y = posY;
+    
+    for (i=0; i < strlen(text); i++)
+    {
+        if ((x+16 < max_width)&&(y+16 < HEIGHT))
+        {
+            int idx = (int)text[i] - 32;
+            int j, k;
+            for (j=0; j<16; j++)
+                for (k=0; k<16; k++)
+                {
+                    u8 pixel = character[idx][(15-j)/2][k/2];
+                    if (pixel == 1)
+                    {
+                        fbAdr[3*((x+k)*HEIGHT + y +j)+0] = color_b[color];
+                        fbAdr[3*((x+k)*HEIGHT + y +j)+1] = color_g[color];
+                        fbAdr[3*((x+k)*HEIGHT + y +j)+2] = color_r[color];
+                    }
+                }
+        }
+        x+=16;
+    }
+}
+
+void draw_text_part (char* text, u8* fbAdr, int posX, int posY, int color, int max_width, int start, int end)
+{
+    int i;
+    int x, y;
+    
+    x = posX;
+    y = posY;
+    
+    for (i=0; i < strlen(text); i++)
+    {
+        if ((x+8 < max_width)&&(y+8 < HEIGHT))
+        {
+            int idx = (int)text[i] - 32;
+            int j, k;
+            for (j=7-end; j<=(7-start); j++)
+                for (k=0; k<8; k++)
+                {
+                    u8 pixel = character[idx][7-j][k];
+                    if (pixel == 1)
+                    {
+                        fbAdr[3*((x+k)*HEIGHT + y +j)+0] = color_b[color];
+                        fbAdr[3*((x+k)*HEIGHT + y +j)+1] = color_g[color];
+                        fbAdr[3*((x+k)*HEIGHT + y +j)+2] = color_r[color];
+                    }
+                }
+        }
+        x+=8;
+    }
+}
+
+void draw_text (char* text, u8* fbAdr, int posX, int posY, int color, int max_width)
+{
+    draw_text_part (text, fbAdr, posX, posY, color, max_width, 0, 7);
+}
+
+void draw_text_SL (char* text, u8* fbAdr, int posX, int posY, int color, int max_width, bool size)
+{
+    if (size)
+    {
+        draw_text_XXL (text, fbAdr, posX, posY, color, max_width);
+    } else {
+        draw_text (text, fbAdr, posX, posY, color, max_width);
+    }
+}
+
+#define VCONSOLE_WIDTH 21
+#define VCONSOLE_HEIGHT 9
+char vconsole_buffer[VCONSOLE_HEIGHT][VCONSOLE_WIDTH];
+
+void vc_init()
+{
+    int i,j;
+    for (i=0;i<VCONSOLE_WIDTH-1;i++)
+        for (j=0;j<VCONSOLE_HEIGHT;j++)
+            vconsole_buffer[j][i] = ' ';
+    for (j=0;j<VCONSOLE_HEIGHT;j++) vconsole_buffer[j][VCONSOLE_WIDTH-1] = 0;
+}
+
+void vc_print (char *text)
+{
+    int i,j;
+    for (i=1;i<VCONSOLE_HEIGHT;i++)
+        for (j=0;j<VCONSOLE_WIDTH;j++)
+            vconsole_buffer[i-1][j] = vconsole_buffer[i][j];
+        
+    for (j=0;j<VCONSOLE_WIDTH-1;j++)
+        if (j < strlen(text))
+        {
+            vconsole_buffer[VCONSOLE_HEIGHT-1][j] = text[j];
+        } else vconsole_buffer[VCONSOLE_HEIGHT-1][j] = ' ';
+}
+
+void vc_draw(u8* fbAdr, int posX, int posY, int color, int max_width)
+{
+    int i,j,k;
+    
+    k=0;
+    
+    for (i=0;i<VCONSOLE_HEIGHT;i++)
+    {
+        draw_text (&(vconsole_buffer[i][0]), fbAdr, posX, posY-k, color, max_width);
+        k += 10;
+    }
+}
+
 
 void draw_menu (char* items[], int num)
 {
@@ -337,6 +746,370 @@ void draw_bottom_screen()
 	}
 }
 
+void draw_hyperwarp_marker(u8* fbAdr_L, u8* fbAdr_R)
+{
+    if (hyperwarp_location.x < 18+get_stereo_separation(170)/2) return;
+    if (hyperwarp_location.x > WIDTH_TOP-18-get_stereo_separation(70)/2) return;
+    if (hyperwarp_location.y < 18) return;
+    if (hyperwarp_location.y > HEIGHT-18) return;
+    draw_text_XXL ("j", fbAdr_L, ((int)hyperwarp_location.x)-18-get_stereo_separation(170)/2, ((int)hyperwarp_location.y)-18, C_WHITE, WIDTH_BOTTOM);
+    draw_text_XXL ("k", fbAdr_L, ((int)hyperwarp_location.x)+2-get_stereo_separation(170)/2, ((int)hyperwarp_location.y)-18, C_WHITE, WIDTH_BOTTOM);
+    draw_text_XXL ("h", fbAdr_L, ((int)hyperwarp_location.x)-18-get_stereo_separation(170)/2, ((int)hyperwarp_location.y)+2, C_WHITE, WIDTH_BOTTOM);
+    draw_text_XXL ("i", fbAdr_L, ((int)hyperwarp_location.x)+2-get_stereo_separation(170)/2, ((int)hyperwarp_location.y)+2, C_WHITE, WIDTH_BOTTOM);
+    draw_text_XXL ("j", fbAdr_R, ((int)hyperwarp_location.x)-18+get_stereo_separation(170)/2, ((int)hyperwarp_location.y)-18, C_WHITE, WIDTH_BOTTOM);
+    draw_text_XXL ("k", fbAdr_R, ((int)hyperwarp_location.x)+2+get_stereo_separation(170)/2, ((int)hyperwarp_location.y)-18, C_WHITE, WIDTH_BOTTOM);
+    draw_text_XXL ("h", fbAdr_R, ((int)hyperwarp_location.x)-18+get_stereo_separation(170)/2, ((int)hyperwarp_location.y)+2, C_WHITE, WIDTH_BOTTOM);
+    draw_text_XXL ("i", fbAdr_R, ((int)hyperwarp_location.x)+2+get_stereo_separation(170)/2, ((int)hyperwarp_location.y)+2, C_WHITE, WIDTH_BOTTOM);
+
+}
+
+void draw_computer(u8* fbAdr_L, u8* fbAdr_R, bool target, bool lock, int target_x, int target_y)
+{
+    int x, y;
+    int separation = get_stereo_separation(50);
+    int vlength = WIDTH_TOP/3; //133
+    int vstart = WIDTH_TOP/2-vlength/2; //134
+    int vgap = vlength/4;    //33
+    int vwidth = 2; //3
+    int hlength = HEIGHT/3; //60
+    int hstart = HEIGHT/2-hlength/2; //90
+    int hgap = hlength/4; //15
+    int hwidth = 2;
+    int margin = 20;
+    int t_start_x = WIDTH_TOP/5*4-margin-separation;
+    int t_start_y = margin;
+    int t_width = WIDTH_TOP/5;
+    int t_height = HEIGHT/5;
+    int idx;
+    
+    // vertical cross hair line
+    draw_block(
+        fbAdr_L,
+        vstart-separation/2,
+        (HEIGHT/2)-(vwidth/2),
+        (vlength-vgap)/2,
+        vwidth,
+        shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+        WIDTH_TOP);
+        
+    draw_block(
+        fbAdr_R,
+        vstart+separation/2,
+        (HEIGHT/2)-(vwidth/2),
+        (vlength-vgap)/2,
+        vwidth,
+        shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+        WIDTH_TOP);
+    
+    draw_block(
+        fbAdr_L,
+        vstart+(vlength-vgap)/2+vgap-separation/2,
+        (HEIGHT/2)-(vwidth/2),
+        (vlength-vgap)/2,
+        vwidth,
+        shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+        WIDTH_TOP);
+        
+    draw_block(
+        fbAdr_R,
+        vstart+(vlength-vgap)/2+vgap+separation/2,
+        (HEIGHT/2)-(vwidth/2),
+        (vlength-vgap)/2,
+        vwidth,
+        shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+        WIDTH_TOP);
+        
+    if (front_view)
+    {
+        // horizontal cross hair line
+        draw_block(
+            fbAdr_L,
+            (WIDTH_TOP/2)-(hwidth/2)-separation/2,
+            hstart,
+            hwidth,
+            (hlength-hgap)/2,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+            
+        draw_block(
+            fbAdr_R,
+            (WIDTH_TOP/2)-(hwidth/2)+separation/2,
+            hstart,
+            hwidth,
+            (hlength-hgap)/2,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+            
+        draw_block(
+            fbAdr_L,
+            (WIDTH_TOP/2)-(hwidth/2) - separation/2,
+            hstart+((hlength-hgap)/2)+hgap,
+            hwidth,
+            (hlength-hgap)/2,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+            
+        draw_block(
+            fbAdr_R,
+            (WIDTH_TOP/2)-(hwidth/2)+separation/2,
+            hstart+((hlength-hgap)/2)+hgap,
+            hwidth,
+            (hlength-hgap)/2,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+        
+        // target display
+        if (target && (rho <= 9999))
+        {
+            int x = target_x;
+            int y = target_y;
+            if (x < 8)
+                x = 8;
+            if (x > WIDTH_TOP+8)
+                x = WIDTH_TOP+8;
+            if (y < 8)
+                y = 8;
+            if (y > HEIGHT+8)
+                y = HEIGHT + 8;
+
+            tx = x*(t_width - 16)/WIDTH_TOP+t_start_x;
+            ty = y*(t_height - 16)/HEIGHT+t_start_y;
+            draw_text_XXL ("n", fbAdr_L, x*(t_width - 16)/WIDTH_TOP+t_start_x-separation/2 -1, y*(t_height-16)/HEIGHT+t_start_y, shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT, WIDTH_TOP);
+            draw_text_XXL ("n", fbAdr_R, x*(t_width - 16)/WIDTH_TOP+t_start_x+separation/2 +1, y*(t_height-16)/HEIGHT+t_start_y, shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT, WIDTH_TOP);
+                
+            if ((rho < 800) && lock && (abs(target_y - HEIGHT/2) < 10))
+            {
+                draw_block(
+                    fbAdr_L,
+                    hwidth + t_start_x-separation/2 -1,
+                    hwidth*2 + t_start_y + t_height/2,
+                    t_width/4 - 2*hwidth,
+                    hwidth*2,
+                    shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                    WIDTH_TOP);
+                    
+                draw_block(
+                    fbAdr_R,
+                    hwidth + t_start_x+separation/2 +1,
+                    hwidth*2 + t_start_y + t_height/2,
+                    t_width/4 - 2*hwidth,
+                    hwidth*2,
+                    shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                    WIDTH_TOP);
+                        
+                draw_block(
+                    fbAdr_L,
+                    2*hwidth + t_start_x + 3*t_width/4-separation/2 -1,
+                    hwidth*2 + t_start_y + t_height/2,
+                    t_width/4 - 2*hwidth,
+                    hwidth*2,
+                    shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                    WIDTH_TOP);
+                    
+                draw_block(
+                    fbAdr_R,
+                    2*hwidth + t_start_x + 3*t_width/4+separation/2 +1,
+                    hwidth*2 + t_start_y + t_height/2,
+                    t_width/4 - 2*hwidth,
+                    hwidth*2,
+                    shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                    WIDTH_TOP);
+                        
+                if(abs(target_x - WIDTH_TOP/2) < 10)
+                {
+                    draw_block(
+                        fbAdr_L,
+                        hwidth + t_start_x-separation/2 -1,
+                        hwidth*(-3) + t_start_y + t_height/2,
+                        t_width/4 - 2*hwidth,
+                        hwidth*2,
+                        shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                        WIDTH_TOP);
+                    
+                    draw_block(
+                        fbAdr_R,
+                        hwidth + t_start_x+separation/2 +1,
+                        hwidth*(-3) + t_start_y + t_height/2,
+                        t_width/4 - 2*hwidth,
+                        hwidth*2,
+                        shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                        WIDTH_TOP);
+                        
+                    draw_block(
+                        fbAdr_L,
+                        2*hwidth + t_start_x + 3*t_width/4-separation/2 -1,
+                        hwidth*(-3) + t_start_y + t_height/2,
+                        t_width/4 - 2*hwidth,
+                        hwidth*2,
+                        shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                        WIDTH_TOP);
+                    
+                    draw_block(
+                        fbAdr_R,
+                        2*hwidth + t_start_x + 3*t_width/4+separation/2 +1,
+                        hwidth*(-3) + t_start_y + t_height/2,
+                        t_width/4 - 2*hwidth,
+                        hwidth*2,
+                        shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                        WIDTH_TOP);
+                        
+                    if (rho < 400)
+                    {
+                        draw_block(
+                            fbAdr_L,
+                            (-3)*hwidth + t_start_x + t_width/2 - separation/2,
+                            t_start_y + hwidth,
+                            vwidth*2,
+                            t_height/4 - hwidth,
+                            shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                            WIDTH_TOP);
+
+                        draw_block(
+                            fbAdr_R,
+                            (-3)*hwidth + t_start_x + separation/2 + t_width/2,
+                            t_start_y,
+                            vwidth*2,
+                            t_height/4 -hwidth,
+                            shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                            WIDTH_TOP);
+                            
+                        draw_block(
+                            fbAdr_L,
+                            2*hwidth + t_start_x + t_width/2 - separation/2,
+                            t_start_y + hwidth,
+                            vwidth*2,
+                            t_height/4 - hwidth,
+                            shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                            WIDTH_TOP);
+
+                        draw_block(
+                            fbAdr_R,
+                            2*hwidth + t_start_x + separation/2 + t_width/2,
+                            t_start_y,
+                            vwidth*2,
+                            t_height/4 -hwidth,
+                            shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
+                            WIDTH_TOP);
+                    }
+                }
+            }
+        }
+        
+        draw_box(
+            fbAdr_L,
+            t_start_x-separation/2,
+            t_start_y,
+            t_width,
+            t_height+1,
+            hwidth,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+
+        draw_box(
+            fbAdr_R,
+            t_start_x + separation/2,
+            t_start_y,
+            t_width,
+            t_height,
+            hwidth,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+                
+        draw_box(
+            fbAdr_L,
+            t_start_x + t_width/4-separation/2,
+            t_start_y + t_height/4,
+            t_width/2,
+            t_height/2,
+            hwidth,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+
+        draw_box(
+            fbAdr_R,
+            t_start_x + t_width/4 + separation/2,
+            t_start_y + t_height/4,
+            t_width/2,
+            t_height/2 + 1,
+            hwidth,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+        
+        draw_block(
+            fbAdr_L,
+            t_start_x-separation/2,
+            t_start_y + t_height/2,
+            t_width/4,
+            hwidth,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+
+        draw_block(
+            fbAdr_R,
+            t_start_x + separation/2,
+            t_start_y + t_height/2,
+            t_width/4,
+            hwidth,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+
+        draw_block(
+            fbAdr_L,
+            t_start_x + 3*t_width/4-separation/2,
+            t_start_y + t_height/2,
+            t_width/4,
+            hwidth,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+
+        draw_block(
+            fbAdr_R,
+            t_start_x + 3*t_width/4 + separation/2,
+            t_start_y + t_height/2,
+            t_width/4,
+            hwidth,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+
+        draw_block(
+            fbAdr_L,
+            t_start_x + t_width/2 - separation/2,
+            t_start_y,
+            vwidth,
+            t_height/4,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+
+        draw_block(
+            fbAdr_R,
+            t_start_x + separation/2 + t_width/2,
+            t_start_y,
+            vwidth,
+            t_height/4,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+
+        draw_block(
+            fbAdr_L,
+            t_start_x + t_width/2 -separation/2,
+            t_start_y + 3*t_height/4,
+            vwidth,
+            t_height/4,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+
+        draw_block(
+            fbAdr_R,
+            t_start_x + separation/2 + t_width/2,
+            t_start_y + 3*t_height/4,
+            vwidth,
+            t_height/4,
+            shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
+            WIDTH_TOP);
+    }
+}
+
+
 void draw_top_screen()
 {
     int x,y;
@@ -516,776 +1289,4 @@ void draw_top_screen()
 int get_stereo_separation(int z)
 {
 	return STEREO_SEPARATION * abs(z) / MAX_DIST;
-}
-
-void draw_hyperwarp_marker(u8* fbAdr_L, u8* fbAdr_R)
-{
-	if (hyperwarp_location.x < 18+get_stereo_separation(170)/2) return;
-	if (hyperwarp_location.x > WIDTH_TOP-18-get_stereo_separation(70)/2) return;
-	if (hyperwarp_location.y < 18) return;
-	if (hyperwarp_location.y > HEIGHT-18) return;
-	draw_text_XXL ("j", fbAdr_L, ((int)hyperwarp_location.x)-18-get_stereo_separation(170)/2, ((int)hyperwarp_location.y)-18, C_WHITE, WIDTH_BOTTOM);
-	draw_text_XXL ("k", fbAdr_L, ((int)hyperwarp_location.x)+2-get_stereo_separation(170)/2, ((int)hyperwarp_location.y)-18, C_WHITE, WIDTH_BOTTOM);
-	draw_text_XXL ("h", fbAdr_L, ((int)hyperwarp_location.x)-18-get_stereo_separation(170)/2, ((int)hyperwarp_location.y)+2, C_WHITE, WIDTH_BOTTOM);
-	draw_text_XXL ("i", fbAdr_L, ((int)hyperwarp_location.x)+2-get_stereo_separation(170)/2, ((int)hyperwarp_location.y)+2, C_WHITE, WIDTH_BOTTOM);
-	draw_text_XXL ("j", fbAdr_R, ((int)hyperwarp_location.x)-18+get_stereo_separation(170)/2, ((int)hyperwarp_location.y)-18, C_WHITE, WIDTH_BOTTOM);
-	draw_text_XXL ("k", fbAdr_R, ((int)hyperwarp_location.x)+2+get_stereo_separation(170)/2, ((int)hyperwarp_location.y)-18, C_WHITE, WIDTH_BOTTOM);
-	draw_text_XXL ("h", fbAdr_R, ((int)hyperwarp_location.x)-18+get_stereo_separation(170)/2, ((int)hyperwarp_location.y)+2, C_WHITE, WIDTH_BOTTOM);
-	draw_text_XXL ("i", fbAdr_R, ((int)hyperwarp_location.x)+2+get_stereo_separation(170)/2, ((int)hyperwarp_location.y)+2, C_WHITE, WIDTH_BOTTOM);
-
-}
-
-void draw_computer(u8* fbAdr_L, u8* fbAdr_R, bool target, bool lock, int target_x, int target_y)
-{
-	int x, y;
-	int separation = get_stereo_separation(50);
-	int vlength = WIDTH_TOP/3; //133
-	int vstart = WIDTH_TOP/2-vlength/2; //134
-	int vgap = vlength/4;	//33
-	int vwidth = 2; //3
-	int hlength = HEIGHT/3; //60
-	int hstart = HEIGHT/2-hlength/2; //90
-	int hgap = hlength/4; //15
-	int hwidth = 2;
-	int margin = 20;
-	int t_start_x = WIDTH_TOP/5*4-margin-separation;
-	int t_start_y = margin;
-	int t_width = WIDTH_TOP/5;
-	int t_height = HEIGHT/5;
-	int idx;
-	
-	// vertical cross hair line
-	draw_block(
-		fbAdr_L, 
-		vstart-separation/2, 
-		(HEIGHT/2)-(vwidth/2), 
-		(vlength-vgap)/2, 
-		vwidth, 
-		shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-		WIDTH_TOP);
-		
-	draw_block(
-		fbAdr_R, 
-		vstart+separation/2, 
-		(HEIGHT/2)-(vwidth/2),
-		(vlength-vgap)/2, 
-		vwidth, 
-		shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-		WIDTH_TOP);
-	
-	draw_block(
-		fbAdr_L, 
-		vstart+(vlength-vgap)/2+vgap-separation/2,
-		(HEIGHT/2)-(vwidth/2), 
-		(vlength-vgap)/2, 
-		vwidth, 
-		shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-		WIDTH_TOP);
-		
-	draw_block(
-		fbAdr_R, 
-		vstart+(vlength-vgap)/2+vgap+separation/2, 
-		(HEIGHT/2)-(vwidth/2),
-		(vlength-vgap)/2, 
-		vwidth, 
-		shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-		WIDTH_TOP);
-		
-	if (front_view) 
-	{	
-		// horizontal cross hair line
-		draw_block(
-			fbAdr_L, 
-			(WIDTH_TOP/2)-(hwidth/2)-separation/2, 
-			hstart, 
-			hwidth, 
-			(hlength-hgap)/2, 
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-			WIDTH_TOP);
-			
-		draw_block(
-			fbAdr_R, 
-			(WIDTH_TOP/2)-(hwidth/2)+separation/2, 
-			hstart, 
-			hwidth, 
-			(hlength-hgap)/2, 
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-			WIDTH_TOP);
-			
-		draw_block(
-			fbAdr_L, 
-			(WIDTH_TOP/2)-(hwidth/2) - separation/2, 
-			hstart+((hlength-hgap)/2)+hgap, 
-			hwidth, 
-			(hlength-hgap)/2, 
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-			WIDTH_TOP);
-			
-		draw_block(
-			fbAdr_R, 
-			(WIDTH_TOP/2)-(hwidth/2)+separation/2, 
-			hstart+((hlength-hgap)/2)+hgap, 
-			hwidth, 
-			(hlength-hgap)/2, 
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-			WIDTH_TOP);	
-		
-		// target display
-		if (target && (rho <= 9999))
-		{
-			int x = target_x;
-			int y = target_y;
-			if (x < 8)
-				x = 8;
-			if (x > WIDTH_TOP+8)
-				x = WIDTH_TOP+8;
-			if (y < 8)
-				y = 8;
-			if (y > HEIGHT+8)
-				y = HEIGHT + 8;
-
-			tx = x*(t_width - 16)/WIDTH_TOP+t_start_x;
-			ty = y*(t_height - 16)/HEIGHT+t_start_y;
-			draw_text_XXL ("n", fbAdr_L, x*(t_width - 16)/WIDTH_TOP+t_start_x-separation/2 -1, y*(t_height-16)/HEIGHT+t_start_y, shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT, WIDTH_TOP);
-			draw_text_XXL ("n", fbAdr_R, x*(t_width - 16)/WIDTH_TOP+t_start_x+separation/2 +1, y*(t_height-16)/HEIGHT+t_start_y, shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT, WIDTH_TOP);
-				
-			if ((rho < 800) && lock && (abs(target_y - HEIGHT/2) < 10))
-			{
-				draw_block(
-					fbAdr_L,
-					hwidth + t_start_x-separation/2 -1,
-					hwidth*2 + t_start_y + t_height/2,
-					t_width/4 - 2*hwidth,
-					hwidth*2,
-					shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-					WIDTH_TOP);
-					
-				draw_block(
-					fbAdr_R,
-					hwidth + t_start_x+separation/2 +1,
-					hwidth*2 + t_start_y + t_height/2,
-					t_width/4 - 2*hwidth,
-					hwidth*2,
-					shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-					WIDTH_TOP);
-						
-				draw_block(
-					fbAdr_L,
-					2*hwidth + t_start_x + 3*t_width/4-separation/2 -1,
-					hwidth*2 + t_start_y + t_height/2,
-					t_width/4 - 2*hwidth,
-					hwidth*2,
-					shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-					WIDTH_TOP);
-					
-				draw_block(
-					fbAdr_R,
-					2*hwidth + t_start_x + 3*t_width/4+separation/2 +1,
-					hwidth*2 + t_start_y + t_height/2,
-					t_width/4 - 2*hwidth,
-					hwidth*2,
-					shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-					WIDTH_TOP);
-						
-				if(abs(target_x - WIDTH_TOP/2) < 10)
-				{
-					draw_block(
-						fbAdr_L,
-						hwidth + t_start_x-separation/2 -1,
-						hwidth*(-3) + t_start_y + t_height/2,
-						t_width/4 - 2*hwidth,
-						hwidth*2,
-						shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-						WIDTH_TOP);
-					
-					draw_block(
-						fbAdr_R,
-						hwidth + t_start_x+separation/2 +1,
-						hwidth*(-3) + t_start_y + t_height/2,
-						t_width/4 - 2*hwidth,
-						hwidth*2,
-						shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-						WIDTH_TOP);
-						
-					draw_block(
-						fbAdr_L,
-						2*hwidth + t_start_x + 3*t_width/4-separation/2 -1,
-						hwidth*(-3) + t_start_y + t_height/2,
-						t_width/4 - 2*hwidth,
-						hwidth*2,
-						shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-						WIDTH_TOP);
-					
-					draw_block(
-						fbAdr_R,
-						2*hwidth + t_start_x + 3*t_width/4+separation/2 +1,
-						hwidth*(-3) + t_start_y + t_height/2,
-						t_width/4 - 2*hwidth,
-						hwidth*2,
-						shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-						WIDTH_TOP);
-						
-					if (rho < 400)
-					{
-						draw_block(
-							fbAdr_L,
-							(-3)*hwidth + t_start_x + t_width/2 - separation/2,
-							t_start_y + hwidth,
-							vwidth*2,
-							t_height/4 - hwidth,
-							shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-							WIDTH_TOP);
-
-						draw_block(
-							fbAdr_R,
-							(-3)*hwidth + t_start_x + separation/2 + t_width/2,
-							t_start_y,
-							vwidth*2,
-							t_height/4 -hwidth,
-							shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-							WIDTH_TOP);
-							
-						draw_block(
-							fbAdr_L,
-							2*hwidth + t_start_x + t_width/2 - separation/2,
-							t_start_y + hwidth,
-							vwidth*2,
-							t_height/4 - hwidth,
-							shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-							WIDTH_TOP);
-
-						draw_block(
-							fbAdr_R,
-							2*hwidth + t_start_x + separation/2 + t_width/2,
-							t_start_y,
-							vwidth*2,
-							t_height/4 -hwidth,
-							shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
-							WIDTH_TOP);
-					}
-				}
-			}
-		}
-		
-		draw_box(
-			fbAdr_L, 
-			t_start_x-separation/2, 
-			t_start_y, 
-			t_width, 
-			t_height+1,
-			hwidth,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-			WIDTH_TOP);
-
-		draw_box(
-			fbAdr_R, 
-			t_start_x + separation/2, 
-			t_start_y, 
-			t_width, 
-			t_height,
-			hwidth,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-			WIDTH_TOP);
-				
-		draw_box(
-			fbAdr_L, 
-			t_start_x + t_width/4-separation/2, 
-			t_start_y + t_height/4, 
-			t_width/2, 
-			t_height/2,
-			hwidth,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-			WIDTH_TOP);
-
-		draw_box(
-			fbAdr_R, 
-			t_start_x + t_width/4 + separation/2, 
-			t_start_y + t_height/4, 
-			t_width/2, 
-			t_height/2 + 1,
-			hwidth,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER, 
-			WIDTH_TOP);	
-		
-		draw_block(
-			fbAdr_L,
-			t_start_x-separation/2,
-			t_start_y + t_height/2,
-			t_width/4,
-			hwidth,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
-			WIDTH_TOP);
-
-		draw_block(
-			fbAdr_R,
-			t_start_x + separation/2,
-			t_start_y + t_height/2,
-			t_width/4,
-			hwidth,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
-			WIDTH_TOP);
-
-		draw_block(
-			fbAdr_L,
-			t_start_x + 3*t_width/4-separation/2,
-			t_start_y + t_height/2,
-			t_width/4,
-			hwidth,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
-			WIDTH_TOP);
-
-		draw_block(
-			fbAdr_R,
-			t_start_x + 3*t_width/4 + separation/2,
-			t_start_y + t_height/2,
-			t_width/4,
-			hwidth,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
-			WIDTH_TOP);
-
-		draw_block(
-			fbAdr_L,
-			t_start_x + t_width/2 - separation/2,
-			t_start_y,
-			vwidth,
-			t_height/4,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
-			WIDTH_TOP);
-
-		draw_block(
-			fbAdr_R,
-			t_start_x + separation/2 + t_width/2,
-			t_start_y,
-			vwidth,
-			t_height/4,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
-			WIDTH_TOP);
-
-		draw_block(
-			fbAdr_L,
-			t_start_x + t_width/2 -separation/2,
-			t_start_y + 3*t_height/4,
-			vwidth,
-			t_height/4,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
-			WIDTH_TOP);
-
-		draw_block(
-			fbAdr_R,
-			t_start_x + separation/2 + t_width/2,
-			t_start_y + 3*t_height/4,
-			vwidth,
-			t_height/4,
-			shield_active?C_COMPUTER_SHIELD:C_COMPUTER,
-			WIDTH_TOP);
-	}
-}
-
-void draw_box(u8* fbAdr, int posx, int posy, int length, int height, int lwidth, int color, int max_width)
-{
-		draw_block(
-			fbAdr, 
-			posx, 
-			posy, 
-			length+1, 
-			lwidth, 
-			color, 
-			max_width); 
-		
-		draw_block(
-			fbAdr, 
-			posx, 
-			posy + height, 
-			length+1, 
-			lwidth, 
-			color, 
-			max_width); 
-			
-		draw_block(
-			fbAdr, 
-			posx, 
-			posy, 
-			lwidth, 
-			height, 
-			color, 
-			max_width);
-			
-		draw_block(
-			fbAdr, 
-			posx + length, 
-			posy, 
-			lwidth, 
-			height, 
-			color, 
-			max_width);
-}
-
-void draw_block (u8* fbAdr, int posx, int posy, int length, int width, int color, int max_width)
-{
-	int x,y;
-	
-	for (x=posx; (x < posx+length) && (x < max_width); x++)
-		for (y=posy; (y < posy+width) && (y < HEIGHT);y++)
-		{
-			int idx;
-			idx = ((x*HEIGHT)+y)*3;
-			fbAdr[idx+0] = color_b[color];
-			fbAdr[idx+1] = color_g[color];
-			fbAdr[idx+2] = color_r[color];
-		}
-}
-
-void draw_asteroid(u8* fbAdr_L, u8* fbAdr_R)
-{
-	if (render_object[ASlot].active)
-	{
-		if(VectorLength(render_object[ASlot].mesh.Position) > 20)
-		{
-						Render(render_object[ASlot].mesh, front_view, ASTEROID);
-		} 
-	}
-}
-	
-void draw_trails(u8* fbAdr_L, u8* fbAdr_R)
-{
-	int i;
-	for (i=0; i<NUM_STARS; i++)
-	{
-		int j;
-		Vector3 start = (Vector3) {trail_stars[i].x, trail_stars[i].y, trail_stars[i].z, 0};
-		Vector3 trail = VectorSub(start, (Vector3){stars[i].x, stars[i].y, stars[i].z, 0});
-		Vector3 step = VectorNormal(trail);
-		int dist = abs((int)VectorLength(trail));
-		
-		checkSoundFX();
-		
-		for (j=0; j<dist; j++)
-		{
-			int posX, posY;
-			if ((int)start.Z  > focal_distance)
-			{
-			
-				posX = (int)(focal_distance * start.X / start.Z)+WIDTH_TOP/2;	
-				posY = (int)(focal_distance * start.Y / start.Z)+HEIGHT/2;
-
-				if ((posX < 0) || (posX > WIDTH_TOP))
-				{
-					create_new_star(i);
-					continue;
-				}		
-				if ((posY < 0) || (posY > HEIGHT))
-				{
-					create_new_star(i);
-					continue;
-				}
-				if ((posX > 0) && (posX < WIDTH_TOP) && (posY > 0) && (posY < HEIGHT))
-				{
-					int idx;
-					int x, y;
-					int separation;
-				
-					separation = get_stereo_separation(start.Z);
-				
-					if ((posX + separation/2 + STAR_WIDTH > WIDTH_TOP) ||(posX - separation/2 < 0))
-					{
-						create_new_star(i);
-						continue;
-					}
-
-					for (x=0; x<STAR_WIDTH; x++)
-						for (y=0; y<STAR_WIDTH; y++)
-						{
-							int r, g, b;
-							r = g = b = (int)(color_b[C_STARS]*(1-start.Z/MAX_DIST)+55)-j;
-							if (shield_active)
-							{
-								if(g<225)
-								{
-									g += 30;
-								} else g = 255;
-								r = r/2;
-							}
-						
-							idx=(((posX+x-separation/2)*HEIGHT)+posY+y)*3;
-							fbAdr_L[idx+0] = b;
-							fbAdr_L[idx+1] = g;
-							fbAdr_L[idx+2] = r;
-						
-							idx=(((posX+x+separation/2)*HEIGHT)+posY+y)*3;
-							fbAdr_R[idx+0] = b;
-							fbAdr_R[idx+1] = g;
-							fbAdr_R[idx+2] = r;
-						}
-				} 
-			} else 
-			{
-				create_new_star(i);
-				continue;
-			}
-			start = VectorSub(start, step);
-		}
-	}
-}
-
-void draw_stars(u8* fbAdr_L, u8* fbAdr_R)
-{
-	int i;
-	int dir = 1;
-	
-	if (!front_view) dir = dir * (-1); 
-	
-	for (i=0; i<NUM_STARS; i++)
-	{
-		int posX, posY;
-		
-		checkSoundFX();
-		
-		if ((int)stars[i].z*dir  > focal_distance)
-		{
-			posX = (int)(focal_distance * dir * stars[i].x / stars[i].z)+WIDTH_TOP/2;	
-			posY = (int)(focal_distance * dir * stars[i].y / stars[i].z)+HEIGHT/2;
-
-			if ((posX < 0) || (posX > WIDTH_TOP))
-			{
-				create_new_star(i);
-				continue;
-			}		
-			if ((posY < 0) || (posY > HEIGHT))
-			{
-				create_new_star(i);
-				continue;
-			}
-			if ((posX > 0) && (posX < WIDTH_TOP) && (posY > 0) && (posY < HEIGHT))
-			{
-				int idx;
-				int x, y;
-				int separation;
-				
-				separation = get_stereo_separation(stars[i].z);
-				
-				if ((posX + separation/2 + STAR_WIDTH > WIDTH_TOP) ||(posX - separation/2 < 0))
-				{
-					create_new_star(i);
-					continue;
-				}
-
-				for (x=0; x<STAR_WIDTH; x++)
-					for (y=0; y<STAR_WIDTH; y++)
-					{
-						int r, g, b;
-						r = g = b = (int)(color_b[C_STARS]*(1-stars[i].z/MAX_DIST*dir)+55);
-						if (shield_active)
-						{
-							if(g<225)
-							{
-								g += 30;
-							} else g = 255;
-							r = r/2;
-						}
-						
-						idx=(((posX+x-separation/2)*HEIGHT)+posY+y)*3;
-						fbAdr_L[idx+0] = b;
-						fbAdr_L[idx+1] = g;
-						fbAdr_L[idx+2] = r;
-						
-						idx=(((posX+x+separation/2)*HEIGHT)+posY+y)*3;
-						fbAdr_R[idx+0] = b;
-						fbAdr_R[idx+1] = g;
-						fbAdr_R[idx+2] = r;
-					}
-			} 
-		} else {
-			create_new_star(i);
-		}	
-	}
-}
-
-void draw_debris(u8* fbAdr_L, u8* fbAdr_R)
-{
-	int i;
-	int dir = 1;
-	
-	if (!front_view) dir = dir * (-1); 
-	
-	for (i=0; i<MAX_NUM_DEBRIS; i++)
-	{
-		int posX, posY;
-		if (debris[i].active && ((int)debris[i].pos.z*dir  > 0))
-		{
-			posX = (int)(focal_distance * dir * debris[i].pos.x / debris[i].pos.z)+WIDTH_TOP/2;	
-			posY = (int)(focal_distance * dir * debris[i].pos.y / debris[i].pos.z)+HEIGHT/2;
-
-			if ((posX < 0) || (posX > WIDTH_TOP))
-			{
-				debris[i].active = false;
-				continue;
-			}		
-			if ((posY < 0) || (posY > HEIGHT))
-			{
-				debris[i].active = false;
-				continue;
-			}
-			if ((posX > 0) && (posX < WIDTH_TOP) && (posY > 0) && (posY < HEIGHT))
-			{
-				int idx;
-				int x, y;
-				int separation;
-				
-				separation = STEREO_SEPARATION;
-				if (debris[i].pos.z*dir > MAX_DIST/10) separation = 3*STEREO_SEPARATION/4;
-				if (debris[i].pos.z*dir > MAX_DIST/7) separation = STEREO_SEPARATION/2;
-				if (debris[i].pos.z*dir > MAX_DIST/2) separation = STEREO_SEPARATION/4;
-				if (debris[i].pos.z*dir > 2*MAX_DIST/3) separation = 0;
-				
-				if (posX + separation + DEBRIS_WIDTH > WIDTH_TOP)
-				{
-					debris[i].active = false;
-					continue;
-				}
-
-				for (x=0; x<DEBRIS_WIDTH; x++)
-					for (y=0; y<DEBRIS_WIDTH; y++)
-					{
-						idx=(((posX+x)*HEIGHT)+posY+y)*3;
-						int r, g, b;
-						r = g = b = (int)(color_b[C_STARS]*(1-stars[i].z/MAX_DIST*dir)+55);
-						if (shield_active)
-						{
-							if(g<225)
-							{
-								g += 30;
-							} else g = 255;
-							r = r/2;
-						}
-						
-						
-						fbAdr_L[idx+0] = b;
-						fbAdr_L[idx+1] = g;
-						fbAdr_L[idx+2] = r;
-						
-						idx=(((posX+x+separation)*HEIGHT)+posY+y)*3;
-						fbAdr_R[idx+0] = b;
-						fbAdr_R[idx+1] = g;
-						fbAdr_R[idx+2] = r;
-					}
-			}
-		} else {
-			debris[i].active = false;
-		}	
-	}
-}
-
-void draw_text_SL (char* text, u8* fbAdr, int posX, int posY, int color, int max_width, bool size)
-{
-	if (size)
-	{
-		draw_text_XXL (text, fbAdr, posX, posY, color, max_width);
-	} else {
-		draw_text (text, fbAdr, posX, posY, color, max_width);
-	}
-}
-
-void draw_text (char* text, u8* fbAdr, int posX, int posY, int color, int max_width)
-{
-	draw_text_part (text, fbAdr, posX, posY, color, max_width, 0, 7);
-}
-
-void draw_text_part (char* text, u8* fbAdr, int posX, int posY, int color, int max_width, int start, int end)
-{
-	int i;
-	int x, y;
-	
-	x = posX;
-	y = posY;
-	
-	for (i=0; i < strlen(text); i++)
-	{
-		if ((x+8 < max_width)&&(y+8 < HEIGHT))
-		{
-			int idx = (int)text[i] - 32;
-			int j, k;
-			for (j=7-end; j<=(7-start); j++)
-				for (k=0; k<8; k++)
-				{
-					u8 pixel = character[idx][7-j][k];
-					if (pixel == 1)
-					{
-						fbAdr[3*((x+k)*HEIGHT + y +j)+0] = color_b[color]; 
-						fbAdr[3*((x+k)*HEIGHT + y +j)+1] = color_g[color]; 
-						fbAdr[3*((x+k)*HEIGHT + y +j)+2] = color_r[color]; 
-					}
-				}
-		}
-		x+=8;
-	}
-}
-
-void draw_text_XXL (char* text, u8* fbAdr, int posX, int posY, int color, int max_width)
-{
-	int i;
-	int x, y;
-	
-	x = posX;
-	y = posY;
-	
-	for (i=0; i < strlen(text); i++)
-	{
-		if ((x+16 < max_width)&&(y+16 < HEIGHT))
-		{
-			int idx = (int)text[i] - 32;
-			int j, k;
-			for (j=0; j<16; j++)
-				for (k=0; k<16; k++)
-				{
-					u8 pixel = character[idx][(15-j)/2][k/2];
-					if (pixel == 1)
-					{
-						fbAdr[3*((x+k)*HEIGHT + y +j)+0] = color_b[color]; 
-						fbAdr[3*((x+k)*HEIGHT + y +j)+1] = color_g[color]; 
-						fbAdr[3*((x+k)*HEIGHT + y +j)+2] = color_r[color]; 
-					}
-				}
-		}
-		x+=16;
-	}
-}
-
-#define VCONSOLE_WIDTH 21
-#define VCONSOLE_HEIGHT 9
-char vconsole_buffer[VCONSOLE_HEIGHT][VCONSOLE_WIDTH];
-
-void vc_init()
-{
-	int i,j;
-	for (i=0;i<VCONSOLE_WIDTH-1;i++)
-		for (j=0;j<VCONSOLE_HEIGHT;j++)
-			vconsole_buffer[j][i] = ' ';
-	for (j=0;j<VCONSOLE_HEIGHT;j++) vconsole_buffer[j][VCONSOLE_WIDTH-1] = 0;		
-}
-
-void vc_print (char *text)
-{
-	int i,j;
-	for (i=1;i<VCONSOLE_HEIGHT;i++)
-		for (j=0;j<VCONSOLE_WIDTH;j++)
-			vconsole_buffer[i-1][j] = vconsole_buffer[i][j];
-		
-	for (j=0;j<VCONSOLE_WIDTH-1;j++)
-		if (j < strlen(text))
-		{
-			vconsole_buffer[VCONSOLE_HEIGHT-1][j] = text[j];
-		} else vconsole_buffer[VCONSOLE_HEIGHT-1][j] = ' ';
-}
-
-void vc_draw(u8* fbAdr, int posX, int posY, int color, int max_width)
-{
-	int i,j,k;
-	
-	k=0; 
-	
-	for (i=0;i<VCONSOLE_HEIGHT;i++)
-	{
-		draw_text (&(vconsole_buffer[i][0]), fbAdr, posX, posY-k, color, max_width);
-		k += 10;
-	}
 }

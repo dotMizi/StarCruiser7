@@ -3,50 +3,49 @@
 
 Vector3 MVMultiply(Matrix3 m, Vector3 v)
 {
-	Vector3 d = {0.0,0.0,0.0,0.0};
-	
-	d.X = m.a1 * v.X + m.a2 * v.X + m.a3 * v.X + m.a4 * v.X;
-	d.Y = m.b1 * v.Y + m.b2 * v.Y + m.b3 * v.Y + m.b4 * v.Y;
-	d.Z = m.c1 * v.Z + m.c2 * v.Z + m.c3 * v.Z + m.c4 * v.Z;
-	d.W = m.d1 * v.W + m.d2 * v.W + m.d3 * v.W + m.d4 * v.W;
-	
-	return d;
+    Vector3 d;
+    d.X = m.a1 * v.X + m.a2 * v.Y + m.a3 * v.Z + m.a4 * v.W;
+    d.Y = m.b1 * v.X + m.b2 * v.Y + m.b3 * v.Z + m.b4 * v.W;
+    d.Z = m.c1 * v.X + m.c2 * v.Y + m.c3 * v.Z + m.c4 * v.W;
+    d.W = m.d1 * v.X + m.d2 * v.Y + m.d3 * v.Z + m.d4 * v.W;
+    return d;
 }
 
 Vector3 TransformCoordinate(Matrix3 m, Vector3 v)
 {
     Vector3 w;
+    float invW = 1.0f / (v.X * m.a4 + v.Y * m.b4 + v.Z * m.c4 + m.d4);
 
-    w.X = v.X * m.a1 + v.Y * m.b1 + v.Z * m.c1 + m.d1;
-    w.Y = v.X * m.a2 + v.Y * m.b2 + v.Z * m.c2 + m.d2;
-    w.Z = v.X * m.a3 + v.Y * m.b3 + v.Z * m.c3 + m.d3;
-    w.W = 1 / (v.X * m.a4 + v.Y * m.b4 + v.Z * m.c4 + m.d4);
+    w.X = (v.X * m.a1 + v.Y * m.b1 + v.Z * m.c1 + m.d1) * invW;
+    w.Y = (v.X * m.a2 + v.Y * m.b2 + v.Z * m.c2 + m.d2) * invW;
+    w.Z = (v.X * m.a3 + v.Y * m.b3 + v.Z * m.c3 + m.d3) * invW;
+    w.W = invW;
 
     return w;
 }
 
 Matrix3 MMMultiply(Matrix3 m1, Matrix3 m2)
 {
-	Matrix3 m;
-	
-	m.a1 = m1.a1*m2.a1 + m1.a2*m2.b1 + m1.a3*m2.c1 + m1.a4*m2.d1;
-	m.a2 = m1.a1*m2.a2 + m1.a2*m2.b2 + m1.a3*m2.c2 + m1.a4*m2.d2;
-	m.a3 = m1.a1*m2.a3 + m1.a2*m2.b3 + m1.a3*m2.c3 + m1.a4*m2.d3;
-	m.a4 = m1.a1*m2.a4 + m1.a2*m2.b4 + m1.a3*m2.c4 + m1.a4*m2.d4;
-	m.b1 = m1.b1*m2.a1 + m1.b2*m2.b1 + m1.b3*m2.c1 + m1.b4*m2.d1;
-	m.b2 = m1.b1*m2.a2 + m1.b2*m2.b2 + m1.b3*m2.c2 + m1.b4*m2.d2;
-	m.b3 = m1.b1*m2.a3 + m1.b2*m2.b3 + m1.b3*m2.c3 + m1.b4*m2.d3;
-	m.b4 = m1.b1*m2.a4 + m1.b2*m2.b4 + m1.b3*m2.c4 + m1.b4*m2.d4;
-	m.c1 = m1.c1*m2.a1 + m1.c2*m2.b1 + m1.c3*m2.c1 + m1.c4*m2.d1;
-	m.c2 = m1.c1*m2.a2 + m1.c2*m2.b2 + m1.c3*m2.c2 + m1.c4*m2.d2;
-	m.c3 = m1.c1*m2.a3 + m1.c2*m2.b3 + m1.c3*m2.c3 + m1.c4*m2.d3;
-	m.c4 = m1.c1*m2.a4 + m1.c2*m2.b4 + m1.c3*m2.c4 + m1.c4*m2.d4;
-	m.d1 = m1.d1*m2.a1 + m1.d2*m2.b1 + m1.d3*m2.c1 + m1.d4*m2.d1;
-	m.d2 = m1.d1*m2.a2 + m1.d2*m2.b2 + m1.d3*m2.c2 + m1.d4*m2.d2;
-	m.d3 = m1.d1*m2.a3 + m1.d2*m2.b3 + m1.d3*m2.c3 + m1.d4*m2.d3;
-	m.d4 = m1.d1*m2.a4 + m1.d2*m2.b4 + m1.d3*m2.c4 + m1.d4*m2.d4;
-	
-	return m;
+    Matrix3 m;
+    
+    m.a1 = m1.a1*m2.a1 + m1.a2*m2.b1 + m1.a3*m2.c1 + m1.a4*m2.d1;
+    m.a2 = m1.a1*m2.a2 + m1.a2*m2.b2 + m1.a3*m2.c2 + m1.a4*m2.d2;
+    m.a3 = m1.a1*m2.a3 + m1.a2*m2.b3 + m1.a3*m2.c3 + m1.a4*m2.d3;
+    m.a4 = m1.a1*m2.a4 + m1.a2*m2.b4 + m1.a3*m2.c4 + m1.a4*m2.d4;
+    m.b1 = m1.b1*m2.a1 + m1.b2*m2.b1 + m1.b3*m2.c1 + m1.b4*m2.d1;
+    m.b2 = m1.b1*m2.a2 + m1.b2*m2.b2 + m1.b3*m2.c2 + m1.b4*m2.d2;
+    m.b3 = m1.b1*m2.a3 + m1.b2*m2.b3 + m1.b3*m2.c3 + m1.b4*m2.d3;
+    m.b4 = m1.b1*m2.a4 + m1.b2*m2.b4 + m1.b3*m2.c4 + m1.b4*m2.d4;
+    m.c1 = m1.c1*m2.a1 + m1.c2*m2.b1 + m1.c3*m2.c1 + m1.c4*m2.d1;
+    m.c2 = m1.c1*m2.a2 + m1.c2*m2.b2 + m1.c3*m2.c2 + m1.c4*m2.d2;
+    m.c3 = m1.c1*m2.a3 + m1.c2*m2.b3 + m1.c3*m2.c3 + m1.c4*m2.d3;
+    m.c4 = m1.c1*m2.a4 + m1.c2*m2.b4 + m1.c3*m2.c4 + m1.c4*m2.d4;
+    m.d1 = m1.d1*m2.a1 + m1.d2*m2.b1 + m1.d3*m2.c1 + m1.d4*m2.d1;
+    m.d2 = m1.d1*m2.a2 + m1.d2*m2.b2 + m1.d3*m2.c2 + m1.d4*m2.d2;
+    m.d3 = m1.d1*m2.a3 + m1.d2*m2.b3 + m1.d3*m2.c3 + m1.d4*m2.d3;
+    m.d4 = m1.d1*m2.a4 + m1.d2*m2.b4 + m1.d3*m2.c4 + m1.d4*m2.d4;
+    
+    return m;
 }
 
 Vector3 VectorCross(Vector3 v1, Vector3 v2)
@@ -82,15 +81,11 @@ float Vec2Length(Vector2 v)
 
 Vector3 VectorNormal(Vector3 v)
 {
-	Vector3 r;
-	float l = VectorLength(v);
-	if (l == 0) return v;
-	r.X = v.X/l;
-	r.Y = v.Y/l;
-	r.Z = v.Z/l;
-	r.W = v.W;
-	
-	return r;
+    float lengthSq = v.X * v.X + v.Y * v.Y + v.Z * v.Z;
+    if (lengthSq == 0.0f) return v; // Vermeidung von Division durch Null
+    float invLength = 1.0f / sqrtf(lengthSq);
+
+    return (Vector3){v.X * invLength, v.Y * invLength, v.Z * invLength, v.W};
 }
 
 Vector3 VectorSub (Vector3 v1, Vector3 v2)
@@ -127,7 +122,7 @@ Vector3 VectorScalar(Vector3 v, float s)
 	return d;
 }
 
-Matrix3 PerspectiveFovRH(float fieldOfViewY, float aspectRatio, float znearPlane, float zfarPlane)
+Matrix3 PerspectiveFovRH(float fovY, float aspect, float znear, float zfar)
 {
 	// This function uses the following formula to compute the returned matrix:
 	// The view space height is represented by h. It is calculated from h = cot(fieldOfViewY/2). 
@@ -138,28 +133,18 @@ Matrix3 PerspectiveFovRH(float fieldOfViewY, float aspectRatio, float znearPlane
 	// 0       0       znearPlane*zfarPlane/(znearPlane-zfarPlane)    0
 	// taken from https://docs.microsoft.com/en-us/previous-versions/ms128711(v=vs.100)
 	// Matrix.PerspectiveFovRH Method
-	
-	Matrix3 m;
-	
-	m.a1 = (1/tan(fieldOfViewY/2))/aspectRatio;
-	m.a2 = 0;
-	m.a3 = 0;
-	m.a4 = 0;
-	m.b1 = 0;
-	m.b2 = 1/tan(fieldOfViewY/2);
-	m.b3 = 0;
-	m.b4 = 0;
-	m.c1 = 0;
-	m.c2 = 0;
-	m.c3 = zfarPlane/(znearPlane-zfarPlane);
-	m.c4 = -1;
-	m.d1 = 0;
-	m.d2 = 0;
-	m.d3 = znearPlane*zfarPlane/(znearPlane-zfarPlane);
-	m.d4 = 1;
-	
-	return m;
-}
+        float f = 1.0f / tanf(fovY * 0.5f);
+        float nf = 1.0f / (znear - zfar);
+
+        Matrix3 m = {
+            f / aspect, 0, 0, 0,
+            0, f, 0, 0,
+            0, 0, zfar * nf, -1,
+            0, 0, znear * zfar * nf, 0
+        };
+
+        return m;
+    }
 
 Matrix3 LookAtLH(Vector3 Position, Vector3 Target)
 {
@@ -203,62 +188,30 @@ Matrix3 LookAtLH(Vector3 Position, Vector3 Target)
 
 Matrix3 RotationYawPitchRoll(float yaw, float pitch, float roll)
 {
-	Matrix3 Rx;
-	Matrix3 Ry;
-	Matrix3 Rz;
-	
-	Rx.a1 = 1;
-	Rx.a2 = 0;
-	Rx.a3 = 0;
-	Rx.a4 = 0;
-	Rx.b1 = 0;
-	Rx.b2 = cos(yaw);
-	Rx.b3 = (-1)*sin(yaw);
-	Rx.b4 = 0;
-	Rx.c1 = 0;
-	Rx.c2 = sin(yaw);
-	Rx.c3 = cos(yaw);
-	Rx.c4 = 0;
-	Rx.d1 = 0;
-	Rx.d2 = 0;
-	Rx.d3 = 0;
-	Rx.d4 = 1;
-	
-	Ry.a1 = cos(pitch);
-	Ry.a2 = 0;
-	Ry.a3 = sin(pitch);
-	Ry.a4 = 0;
-	Ry.b1 = 0;
-	Ry.b2 = 1;
-	Ry.b3 = 0;
-	Ry.b4 = 0;
-	Ry.c1 = (-1)*sin(pitch);
-	Ry.c2 = 0;
-	Ry.c3 = cos(pitch);
-	Ry.c4 = 0;
-	Ry.d1 = 0;
-	Ry.d2 = 0;
-	Ry.d3 = 0;
-	Ry.d4 = 1;
-	
-	Rz.a1 = cos(roll);
-	Rz.a2 = (-1)*sin(roll);
-	Rz.a3 = 0;
-	Rz.a4 = 0;
-	Rz.b1 = sin(roll);
-	Rz.b2 = cos(roll);
-	Rz.b3 = 0;
-	Rz.b4 = 0;
-	Rz.c1 = 0;
-	Rz.c2 = 0;
-	Rz.c3 = 1;
-	Rz.c4 = 0;
-	Rz.d1 = 0;
-	Rz.d2 = 0;
-	Rz.d3 = 0;
-	Rz.d4 = 1;
-	
-	return MMMultiply(MMMultiply(Rx, Ry), Rz);
+    float cosYaw = cosf(yaw), sinYaw = sinf(yaw);
+    float cosPitch = cosf(pitch), sinPitch = sinf(pitch);
+    float cosRoll = cosf(roll), sinRoll = sinf(roll);
+
+    Matrix3 rx = {
+        1, 0, 0, 0,
+        0, cosYaw, -sinYaw, 0,
+        0, sinYaw, cosYaw, 0,
+        0, 0, 0, 1
+    };
+    Matrix3 ry = {
+        cosPitch, 0, sinPitch, 0,
+        0, 1, 0, 0,
+        -sinPitch, 0, cosPitch, 0,
+        0, 0, 0, 1
+    };
+    Matrix3 rz = {
+        cosRoll, -sinRoll, 0, 0,
+        sinRoll, cosRoll, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1
+    };
+
+    return MMMultiply(MMMultiply(rz, ry), rx);
 }
 
 Matrix3 Translation (Vector3 v)
