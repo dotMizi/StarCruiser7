@@ -827,7 +827,7 @@ void move_objects()
 	{
 		if (render_object[i].active)
 		{
-			render_object[i].mesh.Position.Z -= (warp_state == NOT_ENGAGED)?velocity[speed]:(int)warp_speed; //move by cruiser speed
+            render_object[i].mesh.Position.Z -= (warp_state == NOT_ENGAGED)?velocity[speed]:(render_object[i].mesh.Position.Z > -6000)?(int)warp_speed:0; //move by cruiser speed
 			
 			if (render_object[i].objecttype == ENEMYPHOTONT)
 			{
@@ -2418,8 +2418,8 @@ int main()
 					{
 						if (rand()%100 < 8)
 						{
-							hyperwarp_direction.x=game_level*((float)(rand()%10))/20 - 0.5;
-							hyperwarp_direction.y=game_level*((float)(rand()%10))/20 - 0.5;
+							hyperwarp_direction.x=game_level*((float)(rand()%10))/40 - 0.25;
+							hyperwarp_direction.y=game_level*((float)(rand()%10))/40 - 0.25;
 							hyperwarp_direction.z=0;
 						}
 					}

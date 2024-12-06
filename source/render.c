@@ -877,7 +877,7 @@ void draw_computer(u8* fbAdr_L, u8* fbAdr_R, bool target, bool lock, int target_
             draw_text_XXL ("n", fbAdr_L, x*(t_width - 16)/WIDTH_TOP+t_start_x-separation/2 -1, y*(t_height-16)/HEIGHT+t_start_y, shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT, WIDTH_TOP);
             draw_text_XXL ("n", fbAdr_R, x*(t_width - 16)/WIDTH_TOP+t_start_x+separation/2 +1, y*(t_height-16)/HEIGHT+t_start_y, shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT, WIDTH_TOP);
                 
-            if ((rho < 800) && lock && (abs(target_y - HEIGHT/2) < 10))
+            if ((rho < 8000) && lock && (abs(target_y - HEIGHT/2) < 10))
             {
                 draw_block(
                     fbAdr_L,
@@ -953,7 +953,7 @@ void draw_computer(u8* fbAdr_L, u8* fbAdr_R, bool target, bool lock, int target_
                         shield_active?C_COMPUTER_LIGHT_SHIELD:C_COMPUTER_LIGHT,
                         WIDTH_TOP);
                         
-                    if (rho < 400)
+                    if (rho < 4000)
                     {
                         draw_block(
                             fbAdr_L,
