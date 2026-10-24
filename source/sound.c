@@ -182,10 +182,10 @@ s16 mix_samples(s16 s1, s16 s2) // from http://www.vttoth.com/CMS/index.php/tech
 	// Pick the equation
 	if ((a < 32768) || (b < 32768)) {
 		// first equation when both sources are less than middle of the dynamic range
-		mix = a * b / 32768;
+		mix = (s64)a * b / 32768;
 	} else {
 		// second equation when one or both sources are loud
-		mix = 2 * (a + b) - (a * b) / 32768 - 65536;
+		mix = 2 * (a + b) - ((s64)a * b) / 32768 - 65536;
 	}
 
 	// Output is unsigned (0..65536) so convert back to signed (-32768..32767)
@@ -216,17 +216,17 @@ void fill_buffer(void* audioBuffer, size_t size)
 					}	
 				}
 				s16 sample = (sounds[n].reverse)?
-											((s16) ((float)sounds[n].data[sounds[n].length - sounds[n].offset++] * sounds[n].volume)):
+											((s16) ((float)sounds[n].data[sounds[n].length - 1 - sounds[n].offset++] * sounds[n].volume)):
 											((s16) ((float)sounds[n].data[sounds[n].offset++] * sounds[n].volume));
 				if (sounds[n].balance >= 0) sample_l = mix_samples(sample_l, sample);
 				if (sounds[n].balance <= 0) sample_r = mix_samples(sample_r, sample);
 			}
 		}
 		// Stereo samples are interleaved: left and right channels.
-		dest[i] = (sample_l << 16) | (sample_r & 0xffff);
+		dest[i] = ((u32)(u16)sample_l << 16) | (sample_r & 0xffff);
 	}
 
-	DSP_FlushDataCache(audioBuffer, size);
+	DSP_FlushDataCache(audioBuffer, size * sizeof(*dest));
 }
 
 void checkSoundFX()

@@ -11,6 +11,7 @@
 #include "game.h"
 #include "render.h"
 #include "colors.h"
+#include "visuals.h"
 
 #include "chars.h"
 
@@ -141,6 +142,8 @@ float Clamp(float value)
 // pa, pb, pc, pd must then be sorted before
 void ProcessScanLine(int y, Vector3 pa, Vector3 pb, Vector3 pc, Vector3 pd, u32 color)
 {
+    if (y < 0 || y >= HEIGHT) return;
+
     // Berechnung der Gradienten
     float dy1 = pb.Y - pa.Y;
     float dy2 = pd.Y - pc.Y;
@@ -160,10 +163,30 @@ void ProcessScanLine(int y, Vector3 pa, Vector3 pb, Vector3 pc, Vector3 pd, u32 
         ex = temp;
     }
 
-    // Zeichnen der Linie von sx bis ex
+    // Clip once and reuse depth and color values for the whole scanline.
+    int half_separation = get_stereo_separation((int)pa.Z * 2) / 2;
+    int margin = abs(half_separation);
+    sx = MAX(sx, margin);
+    ex = MIN(ex, WIDTH_TOP - margin);
+    if (sx >= ex) return;
+
+    unsigned alpha = color & 255;
+    unsigned inverse_alpha = 256 - alpha;
+    unsigned r = ((color >> 24) & 255) * alpha;
+    unsigned g = ((color >> 16) & 255) * alpha;
+    unsigned b = ((color >> 8) & 255) * alpha;
     for (int x = sx; x < ex; x++)
     {
-        DrawPoint((Vector3){x, y, pa.Z}, color);
+        int offset = (x * HEIGHT + y) * 3;
+        int left = offset - half_separation * HEIGHT * 3;
+        int right = offset + half_separation * HEIGHT * 3;
+        // Preserve the existing blend against the unshifted left buffer.
+        u8 blue = (inverse_alpha * fbAdr_L[offset] + b) >> 8;
+        u8 green = (inverse_alpha * fbAdr_L[offset + 1] + g) >> 8;
+        u8 red = (inverse_alpha * fbAdr_L[offset + 2] + r) >> 8;
+        fbAdr_L[left] = fbAdr_R[right] = blue;
+        fbAdr_L[left + 1] = fbAdr_R[right + 1] = green;
+        fbAdr_L[left + 2] = fbAdr_R[right + 2] = red;
     }
 }
 
@@ -181,7 +204,7 @@ void DrawTriangle(Vector3 p1, Vector3 p2, Vector3 p3, u32 color)
     // Wähle die Reihenfolge der Scanline-Verarbeitung basierend auf Steigung
     bool isRightHanded = dP1P2 > dP1P3;
 
-    for (int y = (int)p1.Y; y <= (int)p3.Y; y++)
+    for (int y = MAX((int)p1.Y, 0); y <= MIN((int)p3.Y, HEIGHT - 1); y++)
     {
         if (y < p2.Y)
         {
@@ -202,6 +225,49 @@ void DrawTriangle(Vector3 p1, Vector3 p2, Vector3 p3, u32 color)
     }
 }
 
+/* Static model normals are built once. No allocations occur while drawing. */
+#define LIGHT_MODELS 8
+#define LIGHT_FACES 128
+static struct {
+    const Vertex *vertices;
+    const Face *faces;
+    int count;
+    Vector3 normals[LIGHT_FACES];
+} lighting_cache[LIGHT_MODELS];
+
+static Vector3 face_normal(Mesh mesh, int index)
+{
+    Face f = mesh.faces[index];
+    Vertex a = mesh.vertexes[f.a], b = mesh.vertexes[f.b], c = mesh.vertexes[f.c];
+    Vector3 ab = {b.x-a.x, b.y-a.y, b.z-a.z, 0};
+    Vector3 ac = {c.x-a.x, c.y-a.y, c.z-a.z, 0};
+    Vector3 normal = VectorCross(ab, ac);
+    normal.W = 0;
+    return VectorNormal(normal);
+}
+
+static Vector3 *model_normals(Mesh mesh)
+{
+    if (mesh.num_of_faces <= 0 || mesh.num_of_faces > LIGHT_FACES) return NULL;
+    for (int slot = 0; slot < LIGHT_MODELS; slot++)
+    {
+        if (lighting_cache[slot].vertices == mesh.vertexes &&
+            lighting_cache[slot].faces == mesh.faces &&
+            lighting_cache[slot].count == mesh.num_of_faces)
+            return lighting_cache[slot].normals;
+        if (!lighting_cache[slot].vertices)
+        {
+            lighting_cache[slot].vertices = mesh.vertexes;
+            lighting_cache[slot].faces = mesh.faces;
+            lighting_cache[slot].count = mesh.num_of_faces;
+            for (int i = 0; i < mesh.num_of_faces; i++)
+                lighting_cache[slot].normals[i] = face_normal(mesh, i);
+            return lighting_cache[slot].normals;
+        }
+    }
+    return NULL;
+}
+
 // The main method of the engine that re-compute each vertex projection
 // during each frame
 void Render(Mesh mesh, bool view, enum object_type type)
@@ -220,8 +286,21 @@ void Render(Mesh mesh, bool view, enum object_type type)
         view ? Translation(mesh.Position) : Translation(mesh.BackPosition)
     );
 
+    // Cache shared vertices once per object; retain a fallback for larger meshes.
+    Vector3 projected[128];
+    bool cached = mesh.num_of_vertexes > 0 && mesh.num_of_vertexes <= 128;
+    if (cached)
+        for (int v = 0; v < mesh.num_of_vertexes; v++)
+            projected[v] = Project(mesh.vertexes[v], worldMatrix);
+
     // Häufig verwendete Werte zwischenspeichern
-    float colorBaseFactor = 0.75f / mesh.num_of_faces;
+    Vector3 *normals = model_normals(mesh);
+    // Rotate a fixed, normalized light into model space once per object.
+    Vector3 light = {
+        worldMatrix.a1 * 0.36f + worldMatrix.a2 * 0.48f - worldMatrix.a3 * 0.8f,
+        worldMatrix.b1 * 0.36f + worldMatrix.b2 * 0.48f - worldMatrix.b3 * 0.8f,
+        worldMatrix.c1 * 0.36f + worldMatrix.c2 * 0.48f - worldMatrix.c3 * 0.8f, 0
+    };
     bool isPhotonOrStarbase = (type == PHOTONT) || (type == STARBASE);
     bool isEnemyPhoton = (type == ENEMYPHOTONT);
 
@@ -229,12 +308,18 @@ void Render(Mesh mesh, bool view, enum object_type type)
     for (int i = 0; i < mesh.num_of_faces; i++)
     {
         // Projektion von Eckpunkten vorbereiten
-        Vector3 point1 = Project(mesh.vertexes[mesh.faces[i].a], worldMatrix);
-        Vector3 point2 = Project(mesh.vertexes[mesh.faces[i].b], worldMatrix);
-        Vector3 point3 = Project(mesh.vertexes[mesh.faces[i].c], worldMatrix);
+        Vector3 point1 = cached ? projected[mesh.faces[i].a] :
+            Project(mesh.vertexes[mesh.faces[i].a], worldMatrix);
+        Vector3 point2 = cached ? projected[mesh.faces[i].b] :
+            Project(mesh.vertexes[mesh.faces[i].b], worldMatrix);
+        Vector3 point3 = cached ? projected[mesh.faces[i].c] :
+            Project(mesh.vertexes[mesh.faces[i].c], worldMatrix);
 
         // Farbberechnung
-        float intensity = 0.25f + (i * colorBaseFactor);
+        Vector3 normal = normals ? normals[i] : face_normal(mesh, i);
+        // Meshes contain both windings: light both sides without hiding faces.
+        float intensity = 0.28f + 0.72f * fminf(1.0f, fabsf(VectorDot(normal, light)));
+        if (type == PHOTONT || type == ENEMYPHOTONT) intensity = 1.0f;
         float r = intensity * 255, g = intensity * 255, b = intensity * 255;
 
         // Farbanpassung basierend auf dem Objekttyp
@@ -267,4 +352,5 @@ void Render(Mesh mesh, bool view, enum object_type type)
             DrawTriangle(point1, point2, point3, color);
         }
     }
+    visuals_object_glow(worldMatrix, type, fbAdr_L, fbAdr_R);
 }

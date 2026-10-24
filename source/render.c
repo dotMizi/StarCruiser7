@@ -12,6 +12,7 @@
 #include "3drenderer.h"
 #include "chars.h"
 #include "colors.h"
+#include "visuals.h"
 #include "sound.h"
 
 /*
@@ -253,77 +254,7 @@ void draw_stars(u8* fbAdr_L, u8* fbAdr_R)
 
 void draw_debris(u8* fbAdr_L, u8* fbAdr_R)
 {
-    int i;
-    int dir = 1;
-    
-    if (!front_view) dir = dir * (-1);
-    
-    for (i=0; i<MAX_NUM_DEBRIS; i++)
-    {
-        int posX, posY;
-        if (debris[i].active && ((int)debris[i].pos.z*dir  > 0))
-        {
-            posX = (int)(focal_distance * dir * debris[i].pos.x / debris[i].pos.z)+WIDTH_TOP/2;
-            posY = (int)(focal_distance * dir * debris[i].pos.y / debris[i].pos.z)+HEIGHT/2;
-
-            if ((posX < 0) || (posX > WIDTH_TOP))
-            {
-                debris[i].active = false;
-                continue;
-            }
-            if ((posY < 0) || (posY > HEIGHT))
-            {
-                debris[i].active = false;
-                continue;
-            }
-            if ((posX > 0) && (posX < WIDTH_TOP) && (posY > 0) && (posY < HEIGHT))
-            {
-                int idx;
-                int x, y;
-                int separation;
-                
-                separation = STEREO_SEPARATION;
-                if (debris[i].pos.z*dir > MAX_DIST/10) separation = 3*STEREO_SEPARATION/4;
-                if (debris[i].pos.z*dir > MAX_DIST/7) separation = STEREO_SEPARATION/2;
-                if (debris[i].pos.z*dir > MAX_DIST/2) separation = STEREO_SEPARATION/4;
-                if (debris[i].pos.z*dir > 2*MAX_DIST/3) separation = 0;
-                
-                if (posX + separation + DEBRIS_WIDTH > WIDTH_TOP)
-                {
-                    debris[i].active = false;
-                    continue;
-                }
-
-                for (x=0; x<DEBRIS_WIDTH; x++)
-                    for (y=0; y<DEBRIS_WIDTH; y++)
-                    {
-                        idx=(((posX+x)*HEIGHT)+posY+y)*3;
-                        int r, g, b;
-                        r = g = b = (int)(color_b[C_STARS]*(1-stars[i].z/MAX_DIST*dir)+55);
-                        if (shield_active)
-                        {
-                            if(g<225)
-                            {
-                                g += 30;
-                            } else g = 255;
-                            r = r/2;
-                        }
-                        
-                        
-                        fbAdr_L[idx+0] = b;
-                        fbAdr_L[idx+1] = g;
-                        fbAdr_L[idx+2] = r;
-                        
-                        idx=(((posX+x+separation)*HEIGHT)+posY+y)*3;
-                        fbAdr_R[idx+0] = b;
-                        fbAdr_R[idx+1] = g;
-                        fbAdr_R[idx+2] = r;
-                    }
-            }
-        } else {
-            debris[i].active = false;
-        }
-    }
+    visuals_draw_world(fbAdr_L, fbAdr_R);
 }
 
 void draw_text_XXL (char* text, u8* fbAdr, int posX, int posY, int color, int max_width)
@@ -763,6 +694,21 @@ void draw_hyperwarp_marker(u8* fbAdr_L, u8* fbAdr_R)
 
 }
 
+/* The radar tracks the selected contact even outside the forward view. */
+static bool radar_position(Vector3 position, int *x, int *y)
+{
+    if (!isfinite(position.X) || !isfinite(position.Y) || !isfinite(position.Z))
+        return false;
+    // Absolute depth preserves the original front/rear radar mapping.
+    // A small floor keeps a contact beside the ship visible at the box edge.
+    float depth = fmaxf(fabsf(position.Z), 1.0f);
+    float px = focal_distance * 2.0f * position.X / depth + WIDTH_TOP / 2;
+    float py = focal_distance * 2.0f * position.Y / depth + HEIGHT / 2;
+    *x = (int)fmaxf(8.0f, fminf(WIDTH_TOP - 8.0f, px));
+    *y = (int)fmaxf(8.0f, fminf(HEIGHT - 8.0f, py));
+    return true;
+}
+
 void draw_computer(u8* fbAdr_L, u8* fbAdr_R, bool target, bool lock, int target_x, int target_y)
 {
     int x, y;
@@ -1112,6 +1058,7 @@ void draw_computer(u8* fbAdr_L, u8* fbAdr_R, bool target, bool lock, int target_
 
 void draw_top_screen()
 {
+    visuals_begin_frame();
     int x,y;
 	float target_dist = INFINITY;
 	shield_active = shield && shield_avail();
@@ -1137,13 +1084,14 @@ void draw_top_screen()
 	// drawing mode normal flight
     if (warp_state != IN_HYPERSPACE) 
 	{
-		if (warp_state == ENGAGED|ABORTED) 
-		{
-			if (warp_speed > 65)
-			{
-				draw_trails(fbAdr_L, fbAdr_R);
-			} else draw_stars(fbAdr_L, fbAdr_R);
-		}
+        if ((warp_state == ENGAGED || warp_state == ABORTED) && warp_speed > 65)
+        {
+            draw_trails(fbAdr_L, fbAdr_R);
+        }
+        else
+        {
+            draw_stars(fbAdr_L, fbAdr_R);
+        }
 		if (gamestate == GAME_RUNNING)
 		{
 			int i;
@@ -1234,20 +1182,26 @@ void draw_top_screen()
 		draw_text_XXL (act_message, fbAdr_R, WIDTH_TOP/2-strpixellength/2, HEIGHT -30, C_WHITE, WIDTH_TOP);
 	}
 	
-	// draw attack computer
-    if ((computer)&&(computer_avail())) 
-	{
-		if (locked_target() >= 0)
-		{
-			int target_marker = locked_target();
-			int posX = (int)(focal_distance * 2 * render_object[target_marker].mesh.Position.X / render_object[target_marker].mesh.Position.Z * (render_object[target_marker].mesh.Position.Z/abs(render_object[target_marker].mesh.Position.Z)))+WIDTH_TOP/2;	
-			int posY = (int)(focal_distance * 2 * render_object[target_marker].mesh.Position.Y / render_object[target_marker].mesh.Position.Z * (render_object[target_marker].mesh.Position.Z/abs(render_object[target_marker].mesh.Position.Z)))+HEIGHT/2;
-
-			draw_computer(fbAdr_L, fbAdr_R, true, (render_object[target_marker].mesh.Position.Z > 0)?true:false, posX, posY);
-		} else {
-			draw_computer(fbAdr_L, fbAdr_R, false, false, 0, 0);
-		}
-	}
+    // Radar contact validity is independent of the main-view target bracket.
+    if (computer && computer_avail())
+    {
+        int target_marker = locked_target();
+        bool contact = false, in_front = false;
+        int posX = 0, posY = 0;
+        if (target_marker >= 0)
+        {
+            Vector3 position = render_object[target_marker].mesh.Position;
+            rho = VectorLength(position);
+            contact = radar_position(position, &posX, &posY);
+            in_front = position.Z > 0;
+        }
+        draw_computer(fbAdr_L, fbAdr_R, contact, in_front, posX, posY);
+        visuals_draw_target(fbAdr_L, fbAdr_R, target_marker,
+                            target_marker >= 0 && target_lock == target_marker);
+    }
+    else visuals_draw_target(fbAdr_L, fbAdr_R, -1, false);
+    if (gamestate == GAME_RUNNING || gamestate == GAME_END)
+        visuals_draw_impact(fbAdr_L, fbAdr_R);
 
 	if (display_diagnostic)
 	{

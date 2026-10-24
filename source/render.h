@@ -25,5 +25,5 @@ extern void vc_print (char *text);
 extern int get_stereo_separation(int z);
 extern void draw_bottom_screen();
 extern void draw_top_screen();
-extern void draw_menu();
+extern void draw_menu(char *items[], int num);
 #endif

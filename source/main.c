@@ -11,6 +11,7 @@
 #include "chars.h"
 #include "game.h"
 #include "colors.h"
+#include "visuals.h"
 #include "render.h"
 #include "3drenderer.h"
 #include "sound.h"
@@ -293,25 +294,34 @@ enum subsystem_states get_subspace_radio_state()
 	return subspace_radio_state;
 }
 
+static bool is_targetable(int i)
+{
+    return i >= 0 && i < MAX_NUM_OF_ENEMIES && render_object[i].active &&
+        (render_object[i].objecttype == FIGHTER ||
+         render_object[i].objecttype == RAIDER ||
+         render_object[i].objecttype == ZYLONBASE ||
+         render_object[i].objecttype == STARBASE);
+}
+
 void lock_next_target(bool succ)
 {
-	if (target_lock < 0)
-	{
-		target_lock = locked_target();
-	} else {
-		int i = target_lock;
-		
-		do {
-			succ?i++:i--;
-			if (i < 0) i = MAX_NUM_OF_ENEMIES-1;
-			if (i >= MAX_NUM_OF_ENEMIES) i = 0;
-		} while (((render_object[i].objecttype != FIGHTER) ||
-			(render_object[i].objecttype != RAIDER) ||
-			(render_object[i].objecttype != ZYLONBASE) ||
-			(render_object[i].objecttype != STARBASE)) && 
-			(!render_object[i].active));
-		target_lock = i;
-	}
+    if (target_lock < 0 || target_lock >= MAX_NUM_OF_ENEMIES)
+    {
+        target_lock = locked_target();
+        return;
+    }
+
+    int i = target_lock;
+    for (int checked = 0; checked < MAX_NUM_OF_ENEMIES; checked++)
+    {
+        i = (i + (succ ? 1 : MAX_NUM_OF_ENEMIES - 1)) % MAX_NUM_OF_ENEMIES;
+        if (is_targetable(i))
+        {
+            target_lock = i;
+            return;
+        }
+    }
+    target_lock = -1;
 }
 
 int locked_target()
@@ -319,18 +329,9 @@ int locked_target()
 	float target_dist = INFINITY;
 	int i, target_marker = -1;
 	
-	if (target_lock >= 0)
-		if (render_object[i].active)
-		{
-			if ((render_object[i].objecttype == FIGHTER) ||
-			(render_object[i].objecttype == RAIDER) ||
-			(render_object[i].objecttype == ZYLONBASE) ||
-			(render_object[i].objecttype == STARBASE))
-			{
-				return target_lock;
-			} else target_lock = -1;
-		} else target_lock = -1;
-	
+    if (is_targetable(target_lock)) return target_lock;
+    target_lock = -1;
+
 	for (i = 0; i < MAX_NUM_OF_ENEMIES; i++)
 		if (render_object[i].active) 
 		{
@@ -339,10 +340,11 @@ int locked_target()
 			(render_object[i].objecttype == ZYLONBASE) ||
 			(render_object[i].objecttype == STARBASE))
 			{
-				if(VectorLength(render_object[i].mesh.Position) < target_dist) 
-				{
-					target_marker = i;
-					target_dist = VectorLength(render_object[i].mesh.Position);
+				float distance_squared = VectorDot(render_object[i].mesh.Position, render_object[i].mesh.Position);
+                if (distance_squared < target_dist)
+                {
+                    target_marker = i;
+                    target_dist = distance_squared;
 				}
 			}
 		}
@@ -822,6 +824,7 @@ void create_new_star(int i)
 
 void move_objects()
 {
+    visuals_advance(warp_state == NOT_ENGAGED ? velocity[speed] : warp_speed);
 	int i;
 	for (i=0; i < MAX_NUM_OF_ENEMIES; i++) //move every render object in sector
 	{
@@ -841,6 +844,7 @@ void move_objects()
 					if(abs(render_object[i].mesh.Position.Y) < 40)
 						if(abs(render_object[i].mesh.Position.X) < 40)
 						{
+									visuals_player_hit(render_object[i].mesh.Position, shield && get_shield_state() != DESTROYED);
 									damage(0);
 									render_object[i].active = false;
 									drain_energy(PHOTONT_HIT);
@@ -860,6 +864,7 @@ void move_objects()
 				int j;
 				for (j=0; j < MAX_NUM_OF_ENEMIES; j++) //check photon torpedo hit
 				{
+					// Retain hit feedback on destroyed targets until their slot is reused.
 					if ((render_object[j].objecttype == FIGHTER) ||
 					(render_object[j].objecttype == RAIDER) ||
 					(render_object[j].objecttype == STARBASE) ||
@@ -880,12 +885,13 @@ void move_objects()
 											overall_enemies_destroyed++;
 										} else gmap[cruiser_sector_x][cruiser_sector_y].layerA = 0;
 									}
-									continue;
+									break;
 								}
 					}
 				}
 			}			
 			
+			if (!render_object[i].active) continue;
 			render_object[i].mesh.Rotation.X -= render_object[i].xr; //rotate objects as they need
 			render_object[i].mesh.Rotation.Y -= render_object[i].yr;
 			render_object[i].mesh.Rotation.Z -= render_object[i].zr;				
@@ -897,7 +903,7 @@ void move_objects()
 			
 
 		
-			if (((render_object[i].objecttype == PHOTONT)||(render_object[i].objecttype == ENEMYPHOTONT)) && (VectorLength(render_object[i].mesh.Position) > 1000)) //end of life for photon torpedos
+			if (((render_object[i].objecttype == PHOTONT)||(render_object[i].objecttype == ENEMYPHOTONT)) && (VectorDot(render_object[i].mesh.Position, render_object[i].mesh.Position) > 1000000.0f)) //end of life for photon torpedos
 			{
 				render_object[i].active = false;
 			}
@@ -912,7 +918,7 @@ void move_objects()
 				{
 					render_object[i].mesh.Rotation = face_to(render_object[i].mesh.Rotation, (Vector3) {render_object[i].move.x,render_object[i].move.y,render_object[i].move.z,0});
 				}
-				if (VectorLength(render_object[i].mesh.Position) < 100) render_object[i].mesh.Position = VectorScalar(VectorNormal(render_object[i].mesh.Position),100);
+				if (VectorDot(render_object[i].mesh.Position, render_object[i].mesh.Position) < 10000.0f) render_object[i].mesh.Position = VectorScalar(VectorNormal(render_object[i].mesh.Position),100);
 			}
 	}
 }
@@ -1009,6 +1015,7 @@ int get_num_of_starbases()
 
 void init_game()
 {
+    visuals_reset();
     int i,j;
     front_view = true;
     computer = false;
@@ -1074,6 +1081,7 @@ void init_game()
 
 void init_sector()
 {
+    visuals_reset();
     int i, j;
     docking_state = NONE;
     target_lock = -1;
@@ -1691,13 +1699,14 @@ void move_shuttle()
 
 void hit(int x, int y, int z)
 {
+    visuals_explosion(x, y, z);
 	int i, n = 0;
 	for (i=0; i < sizeof debris / sizeof *debris; i++)
 	{
 		if (n < DEBRIS_PARTICLES_PER_EXPLOSION)
 		{	
 			if (debris[i].ttl <= 0)
-				debris[i].active == false;
+				debris[i].active = false;
 		
 			if (!debris[i].active)
 			{
@@ -1743,6 +1752,7 @@ void move_asteroid()
 				}
 				if (VectorLength(render_object[ASlot].mesh.Position) < 50)
 				{
+					visuals_player_hit(render_object[ASlot].mesh.Position, shield && get_shield_state() != DESTROYED);
 					drain_energy(ASTEROID_HIT);
 					hit (render_object[ASlot].mesh.Position.X, render_object[ASlot].mesh.Position.Y, render_object[ASlot].mesh.Position.Z);
 					overall_damage_count += (60/((shield&&shield_avail())?2:1))*(game_level+1);
@@ -1795,6 +1805,7 @@ void rotate(circlePosition joy)
             alpha = ((float)joy.dy) / -10000;
         }
         
+        visuals_rotate(alpha, beta);
 		int i;
 		for (i=0; i<NUM_STARS; i++)
 		{
@@ -1824,7 +1835,8 @@ void rotate(circlePosition joy)
 				continue;
 				float x, y, z;
 				Vector3 Position = render_object[i].mesh.Position;
-				render_object[i].mesh.Rotation.X -= alpha/4;
+				if (!render_object[i].active) continue;
+			render_object[i].mesh.Rotation.X -= alpha/4;
 				render_object[i].mesh.Rotation.Y -= beta/4;
 				
 				x = (Position.X*cos(beta))+(Position.Z*sin(beta));
@@ -1860,7 +1872,7 @@ int move_on_gmap(int x, int y, int offset)
     int mx, my, i, j;
     mx = my = i = j = 99;
     d = t = 99.99;
-    dist = sqrt(pow(abs(i-target_starbase_x),2)+pow(abs(j-target_starbase_y),2))+offset;
+    dist = sqrt(pow(abs(x-target_starbase_x),2)+pow(abs(y-target_starbase_y),2))+offset;
                         
     for (i = -1; i < 2; i++)
     {

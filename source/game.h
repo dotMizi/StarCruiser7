@@ -106,6 +106,7 @@ extern int speed;
 extern float warp_speed;
 
 extern int ASlot;
+extern int target_lock;
 
 extern int game_level;
 extern struct gmapentry gmap[16][8];
